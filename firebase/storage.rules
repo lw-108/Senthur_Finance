@@ -1,0 +1,31 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*') &&
+             request.resource.size < 10 * 1024 * 1024; // 10MB
+    }
+
+    function isValidPdf() {
+      return request.resource.contentType == 'application/pdf' &&
+             request.resource.size < 15 * 1024 * 1024; // 15MB
+    }
+
+    function isValidVideo() {
+      return request.resource.contentType.matches('video/.*') &&
+             request.resource.size < 50 * 1024 * 1024; // 50MB
+    }
+
+    // Proofs and files scoped by adminUid
+    match /users/{adminUid}/{allPaths=**} {
+      allow read: if isOwner(adminUid);
+      allow write: if isOwner(adminUid) && (isValidImage() || isValidPdf() || isValidVideo());
+      allow delete: if isOwner(adminUid);
+    }
+  }
+}
