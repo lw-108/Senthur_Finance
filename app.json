@@ -12,29 +12,35 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FFFFFF",
-        "foregroundImage": "./assets/images/vel.png"
+"backgroundColor": "#FFFFFF",
+"foregroundImage": "./assets/images/vel.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "SenthurFinance.com"
+      "package": "com.senthurfinance"
     },
     "web": {
       "output": "static",
       "favicon": "./assets/images/vel.png"
     },
     "plugins": [
+      "expo-dev-client",
       "expo-router",
       [
-        "expo-splash-screen",
-        {
-          "backgroundColor": "#FFFFFF",
-          "image": "./assets/images/vinayagar.jpg",
-          "imageWidth": 200,
-          "resizeMode": "contain"
-        }
+"expo-splash-screen",
+{
+  "backgroundColor": "#FFFFFF",
+  "image": "./assets/images/vinayagar.jpg",
+  "imageWidth": 200,
+  "resizeMode": "contain"
+}
       ],
       "expo-secure-store",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-image",
+      "expo-camera",
+      "expo-file-system",
+      "expo-contacts",
+      "expo-local-authentication"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -43,7 +49,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "9a480c1f-221e-4155-aace-99956575502c"
+"projectId": "9a480c1f-221e-4155-aace-99956575502c"
       }
     }
   }

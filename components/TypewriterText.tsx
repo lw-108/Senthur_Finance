@@ -48,7 +48,7 @@ export const TypewriterText: React.FC<TypewriterTextProps> = ({
   delayStart = 400,
 }) => {
   const [displayedUnitsCount, setDisplayedUnitsCount] = useState<number>(0);
-  const cursorOpacity = useRef(new Animated.Value(1));
+  const [cursorOpacity] = useState(() => new Animated.Value(1));
 
   // Blinking cursor animation: loops opacity 1 -> 0 every 500ms
   useEffect(() => {
