@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,15 +7,12 @@ import {
   Animated,
   useWindowDimensions,
   TouchableOpacity,
-  Linking,
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../theme';
-import { TypewriterText } from '../components/TypewriterText';
-import { Pagination } from '../components/Pagination';
 import { PrimaryButton } from '../components/PrimaryButton';
 
 export interface WelcomeScreenProps {
@@ -24,6 +21,7 @@ export interface WelcomeScreenProps {
   onPrivacyPolicy?: () => void;
   onTermsOfUse?: () => void;
   isDarkMode?: boolean;
+  brandName?: string;
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
@@ -32,12 +30,15 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onPrivacyPolicy,
   onTermsOfUse,
   isDarkMode = false,
+  brandName,
 }) => {
+  const displayBrand = (brandName && brandName.trim().length > 0 ? brandName.trim() : 'FINANCE LEDGER').toUpperCase();
   const { height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  // Carousel pagination active index (auto-advances every 3s)
-  const [activeDot, setActiveDot] = useState<number>(0);
+  // Low-height mobile display breakpoints (e.g. iPhone SE, compact Android devices)
+  const isTinyHeight = screenHeight > 0 && screenHeight < 680;
+  const isShortHeight = screenHeight > 0 && screenHeight < 760;
 
   // Entrance animations
   const titleOpacity = useRef(new Animated.Value(0)).current;
@@ -45,7 +46,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   const sheetTranslateY = useRef(new Animated.Value(280)).current;
 
   useEffect(() => {
-    // 1. Title fades in and slides up (translateY 20 -> 0, 600ms)
+    // 1. Title fades in and slides up
     Animated.parallel([
       Animated.timing(titleOpacity, {
         toValue: 1,
@@ -57,38 +58,26 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         duration: 600,
         useNativeDriver: Platform.OS !== 'web',
       }),
-      // 2. Bottom sheet slides up with spring animation
+      // 2. Bottom sheet slides up with clamped spring animation
       Animated.spring(sheetTranslateY, {
         toValue: 0,
-        tension: 45,
-        friction: 8,
+        tension: 50,
+        friction: 9,
+        overshootClamping: true,
         useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start();
-
-    // 3. Auto-advance pagination dots every 3s
-    const carouselTimer = setInterval(() => {
-      setActiveDot((prev) => (prev + 1) % 5);
-    }, 3000);
-
-    return () => {
-      clearInterval(carouselTimer);
-    };
   }, [titleOpacity, titleTranslateY, sheetTranslateY]);
 
   const handlePrivacyPress = () => {
     if (onPrivacyPolicy) {
       onPrivacyPolicy();
-    } else {
-      console.log('Navigating to Privacy Policy');
     }
   };
 
   const handleTermsPress = () => {
     if (onTermsOfUse) {
       onTermsOfUse();
-    } else {
-      console.log('Navigating to Terms of Use');
     }
   };
 
@@ -102,11 +91,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   const legalTextColor = isDarkMode ? theme.colors.textLightGray : theme.colors.textGray;
   const legalLinkColor = isDarkMode ? theme.colors.white : theme.colors.primary;
 
+  // Responsive sizing for low height displays
+  const responsiveTitleSize = isTinyHeight ? 28 : isShortHeight ? 32 : theme.typography.titleSize;
+  const responsiveTitleLineHeight = isTinyHeight ? 32 : isShortHeight ? 36 : theme.typography.titleLineHeight;
+  const responsiveTitleMarginBottom = isTinyHeight ? 20 : isShortHeight ? 26 : 34;
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* 1. Full-bleed background hero image with samy.jpg */}
+      {/* 1. Full-bleed background hero image */}
       <ImageBackground
         source={require('../assets/images/samy.jpg')}
         style={[styles.backgroundImage, { height: screenHeight }]}
@@ -119,13 +113,20 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             theme.colors.overlayMid,
             theme.colors.overlayBottom,
           ]}
-          locations={[0, 0.35, 0.62]}
+          locations={[0, 0.40, 0.72]}
           style={StyleSheet.absoluteFill}
         />
 
-        {/* Content Container */}
-        <View style={[styles.mainContent, { paddingTop: insets.top + 30 }]}>
-          {/* 2. Brand Block (centered in upper-middle of screen) */}
+        {/* Content Container: Anchors 'SENTHUR FINANCE' at the bottom of the upper half section */}
+        <View
+          style={[
+            styles.mainContent,
+            {
+              paddingBottom: responsiveTitleMarginBottom,
+            },
+          ]}
+        >
+          {/* Brand Block: Clean title positioned at the bottom of the hero section */}
           <Animated.View
             style={[
               styles.brandBlock,
@@ -135,73 +136,62 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               },
             ]}
           >
-            {/* Logo mark with wordmark "senthur" */}
-            <View style={styles.logoRow}>
-              <View style={styles.logoCircle}>
-                <Text style={styles.logoLetter}>S</Text>
-              </View>
-              <Text style={styles.wordmark}>senthur</Text>
-            </View>
-
-            {/* Title: SENTHUR FINANCE (over two lines) */}
-            <Text style={styles.titleText}>SENTHUR{'\n'}FINANCE</Text>
-
-            {/* Auto-typing Tamil Greeting */}
-            <TypewriterText
-              units={["வ", "ழ", "க", " ", "வ", "ள", "ம", "ட", "ன"]}
-              typeSpeed={140}
-              eraseSpeed={70}
-              pauseDuration={1800}
-              delayStart={400}
-              containerStyle={styles.tamilContainer}
-            />
+            {/* Title: Organization / Brand Name */}
+            <Text
+              style={[
+                styles.titleText,
+                {
+                  fontSize: responsiveTitleSize,
+                  lineHeight: responsiveTitleLineHeight,
+                },
+              ]}
+            >
+              {displayBrand}
+            </Text>
           </Animated.View>
-
-          {/* 3. Pagination Dots (5 dots, placed above bottom sheet) */}
-          <View style={styles.paginationWrapper}>
-            <Pagination total={5} activeIndex={activeDot} />
-          </View>
         </View>
 
-        {/* 4. Bottom Sheet (Rounded Card with Log In / Sign Up) */}
+        {/* 2. Bottom Sheet (Rounded Card with Log In / Sign Up) */}
         <Animated.View
           style={[
             styles.bottomSheet,
             {
               backgroundColor: sheetBg,
-              paddingBottom: Math.max(insets.bottom, 24),
+              paddingBottom: Math.max(insets.bottom, isTinyHeight ? 12 : 20),
+              paddingTop: isTinyHeight ? 18 : isShortHeight ? 22 : 28,
               transform: [{ translateY: sheetTranslateY }],
             },
           ]}
         >
-          {/* Log in Button */}
-          <PrimaryButton
-            title="Log in"
-            variant="filled"
-            onPress={onLogin || (() => {})}
-            style={{ backgroundColor: loginBtnBg }}
-            textStyle={{ color: loginBtnText }}
-          />
-
-          {/* Sign up Button */}
-          <PrimaryButton
-            title="Sign up"
-            variant="outline"
-            onPress={onSignUp || (() => {})}
-            style={[
-              styles.signUpButton,
-              {
-                backgroundColor: signUpBtnBg,
-                borderColor: signUpBtnBorder,
-              },
-            ]}
-            textStyle={{ color: signUpBtnText }}
-          />
+          {/* Action Buttons: Log In & Sign Up */}
+          <View style={styles.actionBlock}>
+            <PrimaryButton
+              title="Log In"
+              variant="filled"
+              onPress={onLogin || (() => {})}
+              style={[styles.actionBtn, { backgroundColor: loginBtnBg }]}
+              textStyle={{ color: loginBtnText }}
+            />
+            <PrimaryButton
+              title="Sign Up"
+              variant="outline"
+              onPress={onSignUp || (() => {})}
+              style={[
+                styles.actionBtn,
+                styles.signUpButton,
+                {
+                  backgroundColor: signUpBtnBg,
+                  borderColor: signUpBtnBorder,
+                },
+              ]}
+              textStyle={{ color: signUpBtnText }}
+            />
+          </View>
 
           {/* Legal text below buttons */}
-          <View style={styles.legalSection}>
+          <View style={[styles.legalSection, isTinyHeight && { marginTop: 12 }]}>
             <Text style={[styles.legalText, { color: legalTextColor }]}>
-              By continuing, you agree to Senthur Finance's
+              By continuing, you agree to {brandName && brandName.trim().length > 0 ? `${brandName.trim()}'s` : 'the ledger'}
             </Text>
             <View style={styles.legalLinksRow}>
               <TouchableOpacity onPress={handlePrivacyPress} activeOpacity={0.7}>
@@ -244,82 +234,47 @@ const styles = StyleSheet.create({
   },
   mainContent: {
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: 24,
   },
   brandBlock: {
     alignItems: 'center',
-    marginTop: '15%',
     width: '100%',
-  },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  logoCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: theme.colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  logoLetter: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: theme.colors.primary,
-  },
-  wordmark: {
-    fontFamily: 'Polymath',
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.white,
-    letterSpacing: 1.0,
   },
   titleText: {
     fontFamily: theme.typography.fontTitle,
-    fontSize: theme.typography.titleSize,
-    lineHeight: theme.typography.titleLineHeight,
     letterSpacing: theme.typography.titleLetterSpacing,
     color: theme.colors.white,
     textAlign: 'center',
     fontWeight: '800',
     textTransform: 'uppercase',
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowColor: 'rgba(0, 0, 0, 0.55)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
-  },
-  tamilContainer: {
-    marginTop: 12,
-  },
-  paginationWrapper: {
-    marginBottom: 20,
+    textShadowRadius: 10,
   },
   bottomSheet: {
     width: '100%',
     borderTopLeftRadius: theme.spacing.sheetRadius,
     borderTopRightRadius: theme.spacing.sheetRadius,
     paddingHorizontal: theme.spacing.sheetPaddingHorizontal,
-    paddingTop: theme.spacing.sheetPaddingTop,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 12,
   },
+  actionBlock: {
+    width: '100%',
+  },
+  actionBtn: {
+    width: '100%',
+  },
   signUpButton: {
-    marginTop: 12,
+    marginTop: 10,
   },
   legalSection: {
-    marginTop: 24,
+    marginTop: 18,
     alignItems: 'center',
   },
   legalText: {

@@ -18,6 +18,7 @@ import {
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { useTheme } from '@/store/useThemeStore';
+import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 import { useLoan, useLoanSchedule, useUpdateLoan } from '@/features/loans/hooks';
 import { usePayments } from '@/features/payments/hooks';
 import { formatIndianCurrency, formatDate } from '@/utils/formatters';
@@ -27,6 +28,7 @@ import { calculateForeclosureQuote } from '@/lib/finance';
 export default function LoanDetailScreen() {
   const router = useRouter();
   const { colors: dynamicColors } = useTheme();
+  const { business } = useBusinessSettingsStore();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { showSuccess, showError } = useToast();
 
@@ -82,7 +84,7 @@ export default function LoanDetailScreen() {
   const handleSendReminder = () => {
     openWhatsApp(
       '',
-      `Reminder from Senthur Finance: Dear ${loan.customerName}, installment of ${emiFormatted} for loan ${loan.loanNumber} is due on ${loan.nextDueDate || 'soon'}. Please pay promptly.`
+      `Reminder from ${business.businessName || 'Senthur Finance'}: Dear ${loan.customerName}, installment of ${emiFormatted} for loan ${loan.loanNumber} is due on ${loan.nextDueDate || 'soon'}. Please pay promptly.`
     );
   };
 

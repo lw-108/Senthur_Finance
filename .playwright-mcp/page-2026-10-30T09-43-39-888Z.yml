@@ -1,0 +1,16 @@
+- generic [ref=e214]:
+  - generic [ref=e221]:
+    - generic [ref=e225]: SENTHUR FINANCE
+    - generic [ref=e228]:
+      - generic [ref=e229]:
+        - button "Log In" [ref=e230] [cursor=pointer]
+        - button "Sign Up" [ref=e232] [cursor=pointer]
+      - generic [ref=e234]:
+        - generic [ref=e235]: By continuing, you agree to Senthur Finance's
+        - generic [ref=e236]:
+          - generic [ref=e237] [cursor=pointer]: Privacy Policy
+          - generic [ref=e239]: and
+          - generic [ref=e240] [cursor=pointer]: Terms of Use
+  - generic [ref=e347]:
+    - generic [ref=e348]: 
+    - generic [ref=e349]: Senthur Finance setup saved successfully!

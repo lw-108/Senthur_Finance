@@ -37,7 +37,7 @@ export default function NotificationsScreen() {
       amount: formatIndianCurrency(loan.installmentAmount, { isMinorUnit: true }).formatted,
       dueDate: loan.nextDueDate ? formatDate(loan.nextDueDate) : 'today',
       loanNo: loan.loanNumber,
-      businessName: business.businessName || 'Senthur Finance',
+      businessName: business.businessName || 'Finance Ledger',
     });
 
     const borrower = customers?.find((c) => c.id === loan.customerId);

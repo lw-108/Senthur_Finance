@@ -1,0 +1,12 @@
+- generic [ref=f6e12]:
+  - generic [ref=f6e16]: SRI BALAJI CREDIT & FINANCE
+  - generic [ref=f6e19]:
+    - generic [ref=f6e20]:
+      - button "Log In" [ref=f6e21] [cursor=pointer]
+      - button "Sign Up" [ref=f6e23] [cursor=pointer]
+    - generic [ref=f6e25]:
+      - generic [ref=f6e26]: By continuing, you agree to Sri Balaji Credit & Finance's
+      - generic [ref=f6e27]:
+        - generic [ref=f6e28] [cursor=pointer]: Privacy Policy
+        - generic [ref=f6e30]: and
+        - generic [ref=f6e31] [cursor=pointer]: Terms of Use

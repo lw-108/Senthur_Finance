@@ -31,6 +31,7 @@ import { typography } from '@/theme/typography';
 import { radii } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
 import { useTheme } from '@/store/useThemeStore';
+import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 import { useCustomers, useSeedCustomers } from '@/features/customers/hooks';
 import { Customer } from '@/features/customers/types';
 import { formatIndianCurrency } from '@/utils/formatters';
@@ -44,6 +45,7 @@ type SortOption = 'name' | 'outstanding' | 'overdue' | 'score';
 export default function CustomersScreen() {
   const router = useRouter();
   const { colors: dynamicColors, isDark } = useTheme();
+  const { business } = useBusinessSettingsStore();
   const { showSuccess } = useToast();
 
   const [search, setSearch] = useState('');
@@ -70,7 +72,7 @@ export default function CustomersScreen() {
   };
 
   const handleWhatsApp = (phone: string, name: string) => {
-    openWhatsApp(phone, `Hello ${name}, greetings from Senthur Finance.`);
+    openWhatsApp(phone, `Hello ${name}, greetings from ${business.businessName || 'Senthur Finance'}.`);
   };
 
   const handleLoadDemoData = async () => {

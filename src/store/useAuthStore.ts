@@ -3,28 +3,20 @@ import { create } from 'zustand';
 import { secureStorage } from '@/lib/storage/secureStorage';
 import {
   getPermanentAvatarAsync,
-  getPermanentAvatarSync,
   setPermanentAvatar,
-  DEFAULT_AVATAR_URL,
 } from '@/lib/storage/profileStorage';
 import * as LocalAuthentication from 'expo-local-authentication';
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as fbSignOut,
-  sendPasswordResetEmail,
-  onAuthStateChanged,
-  GoogleAuthProvider,
-  signInWithPopup,
-  User,
-} from 'firebase/auth';
-import { auth } from '@/lib/firebase/config';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { setActiveOrganizationId, clearActiveOrganization } from '@/lib/supabase/activeOrg';
+import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
+import type { User } from '@supabase/supabase-js';
 
 const PIN_KEY = 'loanledger_user_pin';
 const LOCK_ENABLED_KEY = 'loanledger_lock_enabled';
 const BIOMETRIC_ENABLED_KEY = 'loanledger_biometric_enabled';
 const USER_PASSWORD_KEY = 'loanledger_user_password';
 const STORED_USER_KEY = 'loanledger_stored_user';
+const SESSION_ACTIVE_KEY = 'loanledger_session_active';
 
 export interface StoredUserProfile {
   uid: string;
@@ -110,7 +102,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const storedPassword = await secureStorage.getItem(USER_PASSWORD_KEY);
       const hasPasswordSet = Boolean(storedPassword);
 
-      // Check stored user profile from previous Google / password sign-in
+      // Check stored user profile from previous sign-in
       const storedUserStr = await secureStorage.getItem(STORED_USER_KEY);
       let storedUser: StoredUserProfile | null = null;
       if (storedUserStr) {
@@ -134,47 +126,84 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const bioPref = await secureStorage.getItem(BIOMETRIC_ENABLED_KEY);
       const isBiometricEnabled = bioPref !== null ? bioPref === 'true' : true;
 
-      // Listen for Firebase Auth changes safely
-      try {
-        onAuthStateChanged(
-          auth,
-          async (firebaseUser) => {
-            if (firebaseUser) {
-              const activeAvatar = firebaseUser.photoURL || (await getPermanentAvatarAsync());
-              if (firebaseUser.photoURL) {
-                await setPermanentAvatar(firebaseUser.photoURL);
-              }
-              const profile: StoredUserProfile = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email,
-                displayName: firebaseUser.displayName,
-                photoURL: activeAvatar,
-                authProvider: 'google',
-              };
-              await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(profile));
+      // Check persistent active session state
+      const sessionActiveStr = await secureStorage.getItem(SESSION_ACTIVE_KEY);
+      const isSessionActive = sessionActiveStr !== null ? sessionActiveStr === 'true' : true;
+      const shouldBeUnlocked = hasStoredAccount && (isSessionActive || !isLockEnabled);
 
-              set({
-                user: firebaseUser,
-                storedUser: profile,
-                hasStoredAccount: true,
-                adminUid: firebaseUser.uid,
-                isInitialized: true,
-              });
-            } else {
-              set({
-                isInitialized: true,
-              });
-            }
-          },
-          (authError) => {
-            console.warn('Firebase Auth State listener notice:', authError?.message);
+      // Supabase Auth Session Initialization & Subscription
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData?.session?.user) {
+            const sbUser = sessionData.session.user;
+            (sbUser as any).uid = sbUser.id;
+            const activeAvatar = (await getPermanentAvatarAsync()) || sbUser.user_metadata?.avatar_url || null;
+            const profile: StoredUserProfile = {
+              uid: sbUser.id,
+              email: sbUser.email || null,
+              displayName: sbUser.user_metadata?.full_name || sbUser.email?.split('@')[0] || 'User',
+              photoURL: activeAvatar,
+              authProvider: 'password',
+            };
+            await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(profile));
+            await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
+
+            // Attempt to resolve and activate user's tenant organization
+            try {
+              const { data: membership } = await supabase
+                .from('organization_members')
+                .select('organization_id')
+                .eq('user_id', sbUser.id)
+                .limit(1)
+                .maybeSingle();
+
+              if (membership?.organization_id) {
+                await setActiveOrganizationId(membership.organization_id);
+              }
+            } catch {}
+
             set({
+              user: sbUser,
+              storedUser: profile,
+              hasStoredAccount: true,
+              adminUid: sbUser.id,
+              isLocked: false,
+              isAuthenticatedSession: true,
               isInitialized: true,
             });
           }
-        );
-      } catch (err) {
-        set({ isInitialized: true });
+
+          // Listen for live Supabase Auth state changes
+          supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (session?.user) {
+              const u = session.user;
+              (u as any).uid = u.id;
+              const activeAvatar = (await getPermanentAvatarAsync()) || u.user_metadata?.avatar_url || null;
+              const profile: StoredUserProfile = {
+                uid: u.id,
+                email: u.email || null,
+                displayName: u.user_metadata?.full_name || u.email?.split('@')[0] || 'User',
+                photoURL: activeAvatar,
+                authProvider: 'password',
+              };
+              await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(profile));
+              await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
+
+              set({
+                user: u,
+                storedUser: profile,
+                hasStoredAccount: true,
+                adminUid: u.id,
+                isLocked: false,
+                isAuthenticatedSession: true,
+                isInitialized: true,
+              });
+            }
+          });
+        } catch (err: any) {
+          console.warn('[Supabase Auth] Session init check notice:', err?.message || err);
+        }
       }
 
       set({
@@ -186,8 +215,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isBiometricAvailable,
         isLockEnabled,
         isBiometricEnabled,
-        isLocked: true,
-        isAuthenticatedSession: false,
+        isLocked: !shouldBeUnlocked,
+        isAuthenticatedSession: shouldBeUnlocked,
         isInitialized: true,
       });
     } catch (e) {
@@ -197,197 +226,282 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signInWithGoogle: async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-
-      let firebaseUser: any = null;
-
-      if (Platform.OS === 'web') {
-        const res = await signInWithPopup(auth, provider);
-        firebaseUser = res.user;
-      } else {
-        try {
-          const res = await signInWithPopup(auth, provider);
-          firebaseUser = res.user;
-        } catch (e: any) {
-          throw new Error(e?.message || 'Google sign-in is not supported on this platform');
-        }
-      }
-
-      if (firebaseUser) {
-        const storedProfile: StoredUserProfile = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName || 'Google User',
-          photoURL: firebaseUser.photoURL || null,
-          authProvider: 'google',
-        };
-
-        await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(storedProfile));
-
-        const existingPassword = await secureStorage.getItem(USER_PASSWORD_KEY);
-        const hasPasswordSet = Boolean(existingPassword);
-
-        set({
-          user: firebaseUser,
-          storedUser: storedProfile,
-          hasStoredAccount: true,
-          hasPasswordSet,
-          adminUid: firebaseUser.uid,
-          isLocked: false,
-          isAuthenticatedSession: true,
-          lastActiveTime: Date.now(),
+      if (isSupabaseConfigured()) {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: Platform.OS === 'web' ? window.location.origin : 'senthurfinance://auth/callback',
+          },
         });
-
-        return { isNewUser: !hasPasswordSet };
+        if (error) {
+          throw error;
+        }
+        return { isNewUser: false };
       }
-      throw new Error('Google Sign-In returned no user credential');
+      throw new Error('Supabase client is not configured. Please supply EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.');
     } catch (err: any) {
       throw err;
     }
   },
 
   signIn: async (email: string, pass: string) => {
-    try {
-      const cred = await signInWithEmailAndPassword(auth, email, pass);
-      const activeAvatar = cred.user.photoURL || (await getPermanentAvatarAsync());
-      const storedProfile: StoredUserProfile = {
-        uid: cred.user.uid,
-        email: cred.user.email,
-        displayName: cred.user.displayName || email.split('@')[0],
-        photoURL: activeAvatar,
-        authProvider: 'password',
-      };
-      await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(storedProfile));
-      await secureStorage.setItem(USER_PASSWORD_KEY, pass);
+    const trimmedEmail = email.trim();
 
-      set({
-        user: cred.user,
-        storedUser: storedProfile,
-        hasStoredAccount: true,
-        hasPasswordSet: true,
-        adminUid: cred.user.uid,
-        isLocked: false,
-        isAuthenticatedSession: true,
-        lastActiveTime: Date.now(),
+    // 1. Authenticate via Supabase Auth
+    if (isSupabaseConfigured()) {
+      const { data: sbRes, error: sbErr } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password: pass,
       });
-    } catch (err: any) {
-      // Offline / unconfigured Firebase fallback for instant access
-      const isOfflineOrUnconfigured =
-        err?.message?.includes('CONFIGURATION_NOT_FOUND') ||
-        err?.code === 'auth/configuration-not-found' ||
-        err?.code === 'auth/operation-not-allowed' ||
-        err?.code === 'auth/network-request-failed' ||
-        err?.code === 'auth/invalid-credential' ||
-        err?.message?.includes('400');
 
-      if (email.trim().length > 0 && pass.length >= 6 && isOfflineOrUnconfigured) {
-        const activeAvatar = await getPermanentAvatarAsync();
-        const localUid = `user-${Date.now()}`;
-        const fallbackUser: StoredUserProfile = {
-          uid: localUid,
-          email: email.trim(),
-          displayName: email.trim().split('@')[0],
+      if (sbErr) {
+        // If Supabase returns invalid login credentials or error, throw it
+        throw new Error(sbErr.message || 'Invalid email or password.');
+      }
+
+      if (sbRes?.user) {
+        const sbUser = sbRes.user;
+        (sbUser as any).uid = sbUser.id;
+        const activeAvatar = (await getPermanentAvatarAsync()) || sbUser.user_metadata?.avatar_url || null;
+        const storedProfile: StoredUserProfile = {
+          uid: sbUser.id,
+          email: sbUser.email || null,
+          displayName: sbUser.user_metadata?.full_name || trimmedEmail.split('@')[0],
           photoURL: activeAvatar,
           authProvider: 'password',
         };
-        await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(fallbackUser));
+        await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(storedProfile));
         await secureStorage.setItem(USER_PASSWORD_KEY, pass);
+        await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
+
+        // Resolve active organization for tenant scoping
+        try {
+          const { data: membership } = await supabase
+            .from('organization_members')
+            .select('organization_id')
+            .eq('user_id', sbUser.id)
+            .limit(1)
+            .maybeSingle();
+
+          if (membership?.organization_id) {
+            await setActiveOrganizationId(membership.organization_id);
+            // Sync user's configured organization name with database
+            try {
+              const currentName = useBusinessSettingsStore.getState().business.businessName?.trim();
+              if (currentName) {
+                await (supabase.from('organizations') as any)
+                  .update({ name: currentName, updated_at: new Date().toISOString() })
+                  .eq('id', membership.organization_id);
+                await (supabase.from('organization_settings') as any)
+                  .upsert({
+                    organization_id: membership.organization_id,
+                    business_profile: {
+                      ...useBusinessSettingsStore.getState().business,
+                      businessName: currentName,
+                    },
+                    updated_at: new Date().toISOString(),
+                  });
+              } else {
+                await useBusinessSettingsStore.getState().initialize();
+              }
+            } catch {}
+          }
+        } catch {}
 
         set({
-          user: fallbackUser as any,
-          storedUser: fallbackUser,
+          user: sbUser,
+          storedUser: storedProfile,
           hasStoredAccount: true,
           hasPasswordSet: true,
-          adminUid: localUid,
+          adminUid: sbUser.id,
           isLocked: false,
           isAuthenticatedSession: true,
           lastActiveTime: Date.now(),
         });
         return;
       }
-      throw err;
     }
+
+    // 2. Offline / local fallback for zero-network development and testing
+    if (trimmedEmail.length > 0 && pass.length >= 6) {
+      const activeAvatar = await getPermanentAvatarAsync();
+      const localUid = `user-${Date.now()}`;
+      const fallbackUser: StoredUserProfile = {
+        uid: localUid,
+        email: trimmedEmail,
+        displayName: trimmedEmail.split('@')[0],
+        photoURL: activeAvatar,
+        authProvider: 'password',
+      };
+      await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(fallbackUser));
+      await secureStorage.setItem(USER_PASSWORD_KEY, pass);
+      await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
+
+      set({
+        user: fallbackUser as any,
+        storedUser: fallbackUser,
+        hasStoredAccount: true,
+        hasPasswordSet: true,
+        adminUid: localUid,
+        isLocked: false,
+        isAuthenticatedSession: true,
+        lastActiveTime: Date.now(),
+      });
+      return;
+    }
+
+    throw new Error('Please enter a valid email and password (minimum 6 characters).');
   },
 
   signUp: async (email: string, pass: string) => {
-    try {
-      const cred = await createUserWithEmailAndPassword(auth, email, pass);
-      const activeAvatar = cred.user.photoURL || (await getPermanentAvatarAsync());
-      const storedProfile: StoredUserProfile = {
-        uid: cred.user.uid,
-        email: cred.user.email,
-        displayName: email.split('@')[0],
-        photoURL: activeAvatar,
-        authProvider: 'password',
-      };
-      await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(storedProfile));
-      await secureStorage.setItem(USER_PASSWORD_KEY, pass);
+    const trimmedEmail = email.trim();
 
-      set({
-        user: cred.user,
-        storedUser: storedProfile,
-        hasStoredAccount: true,
-        hasPasswordSet: true,
-        adminUid: cred.user.uid,
-        isLocked: false,
-        isAuthenticatedSession: true,
-        lastActiveTime: Date.now(),
+    if (isSupabaseConfigured()) {
+      const { data: sbRes, error: sbErr } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password: pass,
       });
-    } catch (err: any) {
-      // If email already in use, automatically sign in
-      if (
-        err?.code === 'auth/email-already-in-use' ||
-        err?.message?.includes('EMAIL_EXISTS')
-      ) {
-        try {
-          await get().signIn(email, pass);
+
+      if (sbErr) {
+        // If user already registered, fallback gracefully to signIn
+        if (sbErr.message?.toLowerCase().includes('already registered')) {
+          await get().signIn(trimmedEmail, pass);
           return;
-        } catch {}
+        }
+        throw new Error(sbErr.message || 'Sign up failed.');
       }
 
-      const isOfflineOrUnconfigured =
-        err?.message?.includes('CONFIGURATION_NOT_FOUND') ||
-        err?.code === 'auth/configuration-not-found' ||
-        err?.code === 'auth/operation-not-allowed' ||
-        err?.code === 'auth/network-request-failed' ||
-        err?.code === 'auth/admin-restricted-operation' ||
-        err?.message?.includes('400');
-
-      if (email.trim().length > 0 && pass.length >= 6 && isOfflineOrUnconfigured) {
+      if (sbRes?.user) {
+        const sbUser = sbRes.user;
+        (sbUser as any).uid = sbUser.id;
         const activeAvatar = await getPermanentAvatarAsync();
-        const localUid = `user-${Date.now()}`;
-        const fallbackUser: StoredUserProfile = {
-          uid: localUid,
-          email: email.trim(),
-          displayName: email.split('@')[0] || 'User',
+        const storedProfile: StoredUserProfile = {
+          uid: sbUser.id,
+          email: sbUser.email || null,
+          displayName: trimmedEmail.split('@')[0],
           photoURL: activeAvatar,
           authProvider: 'password',
         };
-        await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(fallbackUser));
+        await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(storedProfile));
         await secureStorage.setItem(USER_PASSWORD_KEY, pass);
+        await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
+
+        // Provision initial tenant organization if trigger did not auto-run
+        try {
+          const configuredName = useBusinessSettingsStore.getState().business.businessName?.trim();
+          const orgName = configuredName || `${trimmedEmail.split('@')[0]}'s Finance`;
+          const { data: org } = await (supabase.from('organizations') as any)
+            .insert({ name: orgName, status: 'active' })
+            .select()
+            .single();
+
+          if (org) {
+            await (supabase.from('organization_members') as any).insert({
+              organization_id: org.id,
+              user_id: sbUser.id,
+              role: 'owner',
+              status: 'active',
+            });
+            await (supabase.from('organization_settings') as any).insert({
+              organization_id: org.id,
+              business_profile: {
+                ...useBusinessSettingsStore.getState().business,
+                businessName: orgName,
+                email: trimmedEmail,
+              },
+            });
+            await setActiveOrganizationId(org.id);
+          }
+        } catch {}
+
+        // Resolve active organization created by database trigger or insert
+        try {
+          const { data: membership } = await supabase
+            .from('organization_members')
+            .select('organization_id')
+            .eq('user_id', sbUser.id)
+            .limit(1)
+            .maybeSingle();
+
+          if (membership?.organization_id) {
+            await setActiveOrganizationId(membership.organization_id);
+            // Sync user's configured organization name with database
+            try {
+              const currentName = useBusinessSettingsStore.getState().business.businessName?.trim();
+              if (currentName) {
+                await (supabase.from('organizations') as any)
+                  .update({ name: currentName, updated_at: new Date().toISOString() })
+                  .eq('id', membership.organization_id);
+                await (supabase.from('organization_settings') as any)
+                  .upsert({
+                    organization_id: membership.organization_id,
+                    business_profile: {
+                      ...useBusinessSettingsStore.getState().business,
+                      businessName: currentName,
+                    },
+                    updated_at: new Date().toISOString(),
+                  });
+              } else {
+                await useBusinessSettingsStore.getState().initialize();
+              }
+            } catch {}
+          }
+        } catch {}
 
         set({
-          user: fallbackUser as any,
-          storedUser: fallbackUser,
+          user: sbUser,
+          storedUser: storedProfile,
           hasStoredAccount: true,
           hasPasswordSet: true,
-          adminUid: localUid,
+          adminUid: sbUser.id,
           isLocked: false,
           isAuthenticatedSession: true,
           lastActiveTime: Date.now(),
         });
         return;
       }
-      throw err;
     }
+
+    // Offline / local fallback for development
+    if (trimmedEmail.length > 0 && pass.length >= 6) {
+      const activeAvatar = await getPermanentAvatarAsync();
+      const localUid = `user-${Date.now()}`;
+      const fallbackUser: StoredUserProfile = {
+        uid: localUid,
+        email: trimmedEmail,
+        displayName: trimmedEmail.split('@')[0] || 'User',
+        photoURL: activeAvatar,
+        authProvider: 'password',
+      };
+      await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(fallbackUser));
+      await secureStorage.setItem(USER_PASSWORD_KEY, pass);
+      await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
+
+      set({
+        user: fallbackUser as any,
+        storedUser: fallbackUser,
+        hasStoredAccount: true,
+        hasPasswordSet: true,
+        adminUid: localUid,
+        isLocked: false,
+        isAuthenticatedSession: true,
+        lastActiveTime: Date.now(),
+      });
+      return;
+    }
+
+    throw new Error('Please enter a valid email and password (minimum 6 characters).');
   },
 
   signOut: async () => {
-    try {
-      await fbSignOut(auth);
-    } catch {}
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.auth.signOut();
+      } catch {}
+    }
+    await clearActiveOrganization();
     await secureStorage.deleteItem(STORED_USER_KEY);
+    await secureStorage.deleteItem(SESSION_ACTIVE_KEY);
     set({
       user: null,
       storedUser: null,
@@ -399,14 +513,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   resetPassword: async (email: string) => {
-    try {
-      await sendPasswordResetEmail(auth, email);
-    } catch (err: any) {
-      if (err?.message?.includes('CONFIGURATION_NOT_FOUND') || err?.code === 'auth/configuration-not-found') {
-        throw new Error('Firebase Authentication is not yet enabled for project senthur-finance. Please open Firebase Console -> Authentication and click "Get Started".');
+    if (isSupabaseConfigured()) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+      if (error) {
+        throw new Error(error.message);
       }
-      throw err;
+      return;
     }
+    throw new Error('Supabase client is not configured to send password reset email.');
   },
 
   updatePhotoURL: async (photoURL: string) => {
@@ -436,6 +550,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return false;
     }
     if (password === stored) {
+      await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
       set({
         isLocked: false,
         isAuthenticatedSession: true,
@@ -455,10 +570,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   unlockWithPin: async (pin: string) => {
     const storedPin = await secureStorage.getItem(PIN_KEY);
     if (!storedPin) {
+      await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
       set({ isLocked: false, isAuthenticatedSession: true, lastActiveTime: Date.now() });
       return true;
     }
     if (storedPin === pin) {
+      await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
       set({ isLocked: false, isAuthenticatedSession: true, lastActiveTime: Date.now() });
       return true;
     }
@@ -471,10 +588,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     try {
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Unlock Senthur Finance Admin',
+        promptMessage: 'Unlock Administrator Portal',
         fallbackLabel: 'Use Password',
       });
       if (result.success) {
+        await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
         set({ isLocked: false, isAuthenticatedSession: true, lastActiveTime: Date.now() });
         return true;
       }
@@ -486,7 +604,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setLockEnabled: async (enabled: boolean) => {
     await secureStorage.setItem(LOCK_ENABLED_KEY, String(enabled));
-    set({ isLockEnabled: enabled });
+    if (!enabled) {
+      await secureStorage.setItem(SESSION_ACTIVE_KEY, 'true');
+      set({ isLockEnabled: false, isLocked: false, isAuthenticatedSession: true });
+    } else {
+      set({ isLockEnabled: true });
+    }
   },
 
   setBiometricEnabled: async (enabled: boolean) => {
@@ -495,10 +618,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   lockApp: () => {
+    secureStorage.deleteItem(SESSION_ACTIVE_KEY).catch(() => {});
     set({ isLocked: true, isAuthenticatedSession: false });
   },
 
   requireReauth: () => {
+    secureStorage.deleteItem(SESSION_ACTIVE_KEY).catch(() => {});
     set({ isLocked: true, isAuthenticatedSession: false });
   },
 

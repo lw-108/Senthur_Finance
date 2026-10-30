@@ -1,12 +1,12 @@
+import { Platform } from 'react-native';
 import { create } from 'zustand';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { getActiveOrganizationId, DEFAULT_ORG_ID } from '@/lib/supabase/activeOrg';
 import { secureStorage } from '@/lib/storage/secureStorage';
 import {
   getPermanentAvatarAsync,
   getPermanentAvatarSync,
   setPermanentAvatar,
-  DEFAULT_AVATAR_URL,
 } from '@/lib/storage/profileStorage';
 
 const BUSINESS_SETTINGS_KEY = 'loanledger_business_profile';
@@ -46,7 +46,7 @@ interface BusinessSettingsState {
 }
 
 const DEFAULT_BUSINESS: BusinessProfile = {
-  businessName: 'Senthur Finance',
+  businessName: '',
   tagline: '',
   ownerName: 'Admin',
   phone: '',
@@ -59,6 +59,22 @@ const DEFAULT_BUSINESS: BusinessProfile = {
   avatarUrl: null,
 };
 
+function getInitialBusinessSync(): BusinessProfile {
+  let profile = { ...DEFAULT_BUSINESS, avatarUrl: getPermanentAvatarSync() };
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const stored = window.localStorage.getItem(BUSINESS_SETTINGS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          profile = { ...profile, ...parsed };
+        }
+      }
+    } catch {}
+  }
+  return profile;
+}
+
 const DEFAULT_CURRENCY: CurrencySettings = {
   currencySymbol: '₹',
   currencyCode: 'INR',
@@ -68,7 +84,7 @@ const DEFAULT_CURRENCY: CurrencySettings = {
 };
 
 export const useBusinessSettingsStore = create<BusinessSettingsState>((set, get) => ({
-  business: { ...DEFAULT_BUSINESS, avatarUrl: getPermanentAvatarSync() },
+  business: getInitialBusinessSync(),
   currency: DEFAULT_CURRENCY,
   isLoaded: false,
 
@@ -79,24 +95,49 @@ export const useBusinessSettingsStore = create<BusinessSettingsState>((set, get)
       const localCurr = await secureStorage.getItem(CURRENCY_SETTINGS_KEY);
       const permanentAvatar = await getPermanentAvatarAsync();
 
-      let business = localBiz ? { ...DEFAULT_BUSINESS, ...JSON.parse(localBiz) } : DEFAULT_BUSINESS;
+      let business = localBiz ? { ...DEFAULT_BUSINESS, ...JSON.parse(localBiz) } : get().business;
       let currency = localCurr ? { ...DEFAULT_CURRENCY, ...JSON.parse(localCurr) } : DEFAULT_CURRENCY;
 
       if (!business.avatarUrl && permanentAvatar) {
         business.avatarUrl = permanentAvatar;
       }
 
-      // 2. Sync from Firestore if available
-      try {
-        const ref = doc(db, 'settings', 'business_profile');
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          const remoteData = snap.data();
-          if (remoteData.business) business = { ...business, ...remoteData.business };
-          if (remoteData.currency) currency = { ...currency, ...remoteData.currency };
+      // 2. Sync from Supabase organization_settings if configured and active org is resolved
+      if (isSupabaseConfigured()) {
+        try {
+          const orgId = await getActiveOrganizationId();
+          if (orgId && orgId !== DEFAULT_ORG_ID) {
+            const { data, error } = await (supabase.from('organization_settings') as any)
+              .select('business_profile, currency_settings')
+              .eq('organization_id', orgId)
+              .maybeSingle();
+
+            if (!error && data) {
+              if (data.business_profile && typeof data.business_profile === 'object') {
+                business = { ...business, ...data.business_profile };
+                await secureStorage.setItem(BUSINESS_SETTINGS_KEY, JSON.stringify(business));
+                if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
+                  window.localStorage.setItem(BUSINESS_SETTINGS_KEY, JSON.stringify(business));
+                }
+              }
+              if (data.currency_settings && typeof data.currency_settings === 'object') {
+                currency = { ...currency, ...data.currency_settings };
+              }
+            }
+
+            // Also check name from organizations table if present
+            const { data: orgRow } = await (supabase.from('organizations') as any)
+              .select('name')
+              .eq('id', orgId)
+              .maybeSingle();
+            if (orgRow?.name && !business.businessName) {
+              business.businessName = orgRow.name;
+              await secureStorage.setItem(BUSINESS_SETTINGS_KEY, JSON.stringify(business));
+            }
+          }
+        } catch {
+          // Supabase offline / not reachable
         }
-      } catch (e) {
-        // Firestore offline / not reachable
       }
 
       set({ business, currency, isLoaded: true });
@@ -109,15 +150,40 @@ export const useBusinessSettingsStore = create<BusinessSettingsState>((set, get)
     const nextBiz = { ...get().business, ...updates };
     set({ business: nextBiz });
 
+    // Save synchronously for web
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(BUSINESS_SETTINGS_KEY, JSON.stringify(nextBiz));
+      } catch {}
+    }
+
     // Save locally
     await secureStorage.setItem(BUSINESS_SETTINGS_KEY, JSON.stringify(nextBiz));
 
-    // Sync to Firestore
-    try {
-      const ref = doc(db, 'settings', 'business_profile');
-      await setDoc(ref, { business: nextBiz }, { merge: true });
-    } catch (e) {
-      // Offline fallback
+    // Sync to Supabase
+    if (isSupabaseConfigured()) {
+      try {
+        const orgId = await getActiveOrganizationId();
+        if (orgId && orgId !== DEFAULT_ORG_ID) {
+          await (supabase.from('organization_settings') as any)
+            .upsert({
+              organization_id: orgId,
+              business_profile: nextBiz,
+              updated_at: new Date().toISOString(),
+            });
+
+          if (nextBiz.businessName) {
+            await (supabase.from('organizations') as any)
+              .update({
+                name: nextBiz.businessName,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', orgId);
+          }
+        }
+      } catch {
+        // Offline fallback
+      }
     }
   },
 
@@ -127,11 +193,20 @@ export const useBusinessSettingsStore = create<BusinessSettingsState>((set, get)
 
     await secureStorage.setItem(CURRENCY_SETTINGS_KEY, JSON.stringify(nextCurr));
 
-    try {
-      const ref = doc(db, 'settings', 'business_profile');
-      await setDoc(ref, { currency: nextCurr }, { merge: true });
-    } catch (e) {
-      // Offline fallback
+    if (isSupabaseConfigured()) {
+      try {
+        const orgId = await getActiveOrganizationId();
+        if (orgId && orgId !== DEFAULT_ORG_ID) {
+          await (supabase.from('organization_settings') as any)
+            .upsert({
+              organization_id: orgId,
+              currency_settings: nextCurr,
+              updated_at: new Date().toISOString(),
+            });
+        }
+      } catch {
+        // Offline fallback
+      }
     }
   },
 

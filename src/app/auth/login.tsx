@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,11 +23,13 @@ import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { useTheme } from '@/store/useThemeStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 import { WelcomeScreen } from '@/components/welcome';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { isDark, colors: dynamicColors } = useTheme();
+  const { business } = useBusinessSettingsStore();
   const { showSuccess, showError } = useToast();
   const {
     signIn,
@@ -47,6 +50,21 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [modalKeyboardHeight, setModalKeyboardHeight] = useState(0);
+  const modalScrollRef = React.useRef<ScrollView>(null);
+
+  React.useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const s1 = Keyboard.addListener(showEvent, (e) => setModalKeyboardHeight(e.endCoordinates.height));
+    const s2 = Keyboard.addListener(hideEvent, () => setModalKeyboardHeight(0));
+
+    return () => {
+      s1.remove();
+      s2.remove();
+    };
+  }, []);
 
   // Password Setup Modal for First-time Google Auth
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -167,8 +185,9 @@ export default function LoginScreen() {
         onLogin={openLoginForm}
         onSignUp={openSignUpForm}
         isDarkMode={isDark}
-        onPrivacyPolicy={() => showSuccess('Senthur Finance Privacy Policy')}
-        onTermsOfUse={() => showSuccess('Senthur Finance Terms of Use')}
+        brandName={business.businessName}
+        onPrivacyPolicy={() => showSuccess(`${business.businessName || 'Organization'} Privacy Policy`)}
+        onTermsOfUse={() => showSuccess(`${business.businessName || 'Organization'} Terms of Use`)}
       />
 
       {/* 2. Authentication Bottom Sheet / Modal (Opened by Log In / Sign Up) */}
@@ -216,7 +235,7 @@ export default function LoginScreen() {
                   >
                     {isSignUp
                       ? 'First-time money lender account setup'
-                      : 'Sign in to access Senthur Finance portal'}
+                      : `Sign in to access ${business.businessName ? `${business.businessName} ` : ''}portal`}
                   </Text>
                 </View>
 
@@ -239,8 +258,22 @@ export default function LoginScreen() {
             </View>
 
             <ScrollView
+              ref={modalScrollRef}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.sheetScrollContent}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+              contentContainerStyle={[
+                styles.sheetScrollContent,
+                {
+                  paddingBottom:
+                    modalKeyboardHeight > 0
+                      ? Platform.OS === 'android'
+                        ? 160
+                        : modalKeyboardHeight + 30
+                      : 24,
+                },
+              ]}
             >
               {/* Sign in with Google Button */}
               {!isSignUp && (
@@ -460,8 +493,8 @@ export default function LoginScreen() {
                   { color: isDark ? '#A1A1AA' : '#6B7280' },
                 ]}
               >
-                Google account connected! Set a 6+ character password to unlock
-                Senthur Finance whenever you reopen the app.
+                Google account connected! Set a 6+ character password to unlock{' '}
+                {business.businessName || 'Senthur Finance'} whenever you reopen the app.
               </Text>
             </View>
 

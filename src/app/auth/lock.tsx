@@ -228,7 +228,7 @@ export default function LockScreen() {
               { fontSize: isCompact ? 10.5 : 12 },
             ]}
           >
-            Senthur Finance
+            {business.businessName || 'Finance Ledger'}
           </Text>
         </View>
       </View>
@@ -388,7 +388,7 @@ export default function LockScreen() {
                 >
                   {usePinMode
                     ? 'Enter your 4-digit PIN to access portal'
-                    : 'Enter your security password to unlock Senthur Finance'}
+                    : `Enter your security password to unlock ${business.businessName || 'your ledger'}`}
                 </Text>
               </View>
 

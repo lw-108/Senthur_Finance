@@ -162,6 +162,8 @@ export default function RecordPaymentScreen() {
           }
         }}
         options={loanOptions}
+        searchable
+        searchPlaceholder="Search by borrower name or loan number..."
       />
 
       {/* Amount Input */}
@@ -174,13 +176,13 @@ export default function RecordPaymentScreen() {
       {/* Quick Amount Chips */}
       <View style={styles.quickChipsRow}>
         <TouchableOpacity style={[styles.quickChip, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]} onPress={() => handleQuickChip('EMI')}>
-          <Text style={[styles.quickChipText, { color: colors.ink }]}>Full EMI</Text>
+          <Text style={[styles.quickChipText, { color: colors.headingPrimary }]}>Full EMI</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.quickChip, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]} onPress={() => handleQuickChip('INTEREST_ONLY')}>
-          <Text style={[styles.quickChipText, { color: colors.ink }]}>Interest Only</Text>
+          <Text style={[styles.quickChipText, { color: colors.headingPrimary }]}>Interest Only</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.quickChip, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]} onPress={() => handleQuickChip('FULL_DUE')}>
-          <Text style={[styles.quickChipText, { color: colors.ink }]}>Full Settlement</Text>
+          <Text style={[styles.quickChipText, { color: colors.headingPrimary }]}>Full Settlement</Text>
         </TouchableOpacity>
       </View>
 

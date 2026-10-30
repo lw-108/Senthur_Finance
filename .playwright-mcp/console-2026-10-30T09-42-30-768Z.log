@@ -1,0 +1,16 @@
+[   21671ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286
+[   21813ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286
+[  308181ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://localhost:8081/auth/login:0
+[  336106ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286
+[  336275ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286
+[  525314ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286
+[  525506ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286

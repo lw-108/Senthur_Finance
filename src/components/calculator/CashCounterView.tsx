@@ -14,6 +14,7 @@ import { PillButton } from '@/components/ui';
 import { numberToIndianWords } from '@/utils/numberToWords';
 import { useToast } from '@/components/ui/Toast';
 import { copyTextToClipboard } from '@/utils/clipboard';
+import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 
 interface CashCounterViewProps {
   colors: any;
@@ -47,6 +48,7 @@ export function CashCounterView({
   onSendToWords,
 }: CashCounterViewProps) {
   const { showSuccess } = useToast();
+  const { business } = useBusinessSettingsStore();
   const [counts, setCounts] = useState<Record<number, number>>({
     500: 0,
     200: 0,
@@ -106,7 +108,8 @@ export function CashCounterView({
       .map((d) => `${d.label} × ${counts[d.value]} = ₹${(d.value * (counts[d.value] || 0)).toLocaleString('en-IN')}`)
       .join('\n');
 
-    const slip = `--- SENTHUR FINANCE CASH SLIP ---\nDate: ${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n\n${breakdown || 'No notes counted'}\n---------------------------------\nTotal Notes: ${totalNotes}\nTotal Cash: ₹${totalAmount.toLocaleString('en-IN')}\nIn Words: ${words}\n---------------------------------`;
+    const bName = (business.businessName || 'SENTHUR FINANCE').toUpperCase();
+    const slip = `--- ${bName} CASH SLIP ---\nDate: ${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n\n${breakdown || 'No notes counted'}\n---------------------------------\nTotal Notes: ${totalNotes}\nTotal Cash: ₹${totalAmount.toLocaleString('en-IN')}\nIn Words: ${words}\n---------------------------------`;
 
     try {
       await copyTextToClipboard(slip);

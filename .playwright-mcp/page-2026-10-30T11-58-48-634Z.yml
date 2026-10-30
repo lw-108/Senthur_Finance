@@ -1,0 +1,49 @@
+- generic [ref=f1e84]:
+  - generic [ref=f1e85]:
+    - button "Go back" [ref=f1e87] [cursor=pointer]:
+      - generic [ref=f1e88]: 
+    - generic [ref=f1e89]: New Borrower
+    - button "Admin profile" [ref=f1e92] [cursor=pointer]:
+      - generic [ref=f1e93]: SB
+  - generic [ref=f1e96]:
+    - generic [ref=f1e97]:
+      - generic [ref=f1e98]: Step 1 of 5
+      - generic [ref=f1e99]: Identity & Contact
+    - generic [ref=f1e100]: "Next: Address"
+  - generic [ref=f1e104]:
+    - generic [ref=f1e105]:
+      - generic [ref=f1e106]: Borrower Details
+      - generic [ref=f1e107]: Enter primary identification and contact numbers
+    - generic [ref=f1e108]:
+      - generic [ref=f1e109] [cursor=pointer]: Full Legal Name *
+      - generic [ref=f1e111] [cursor=pointer]:
+        - generic [ref=f1e112]: 
+        - textbox "Enter borrower full name" [ref=f1e113]: Ramesh Kumar
+    - generic [ref=f1e114]:
+      - generic [ref=f1e115] [cursor=pointer]: Mobile Number (Primary / WhatsApp) *
+      - generic [ref=f1e117] [cursor=pointer]:
+        - generic [ref=f1e118]: 
+        - textbox "e.g. 9876543210" [active] [ref=f1e119]: "9876543210"
+    - generic [ref=f1e120]:
+      - generic [ref=f1e121] [cursor=pointer]: Alternate Contact Number
+      - generic [ref=f1e123] [cursor=pointer]:
+        - generic [ref=f1e124]: 
+        - textbox "e.g. 9443210987" [ref=f1e125]
+    - generic [ref=f1e126]:
+      - generic [ref=f1e127] [cursor=pointer]: Occupation / Business
+      - generic [ref=f1e129] [cursor=pointer]:
+        - generic [ref=f1e130]: 
+        - textbox "e.g. Textile Merchant" [ref=f1e131]
+    - generic [ref=f1e132]:
+      - generic [ref=f1e133]: Target Loan Scheme / Product
+      - generic [ref=f1e134] [cursor=pointer]:
+        - generic [ref=f1e135]: Gold Loan (Jewel Loan)
+        - generic [ref=f1e136]: 
+    - generic [ref=f1e137]:
+      - generic [ref=f1e138] [cursor=pointer]: Monthly Income (₹)
+      - generic [ref=f1e140] [cursor=pointer]:
+        - generic [ref=f1e141]: 
+        - textbox "e.g. 65000" [ref=f1e142]
+  - generic [ref=f1e145] [cursor=pointer]:
+    - generic [ref=f1e146]: "Next: Address"
+    - generic [ref=f1e147]: 

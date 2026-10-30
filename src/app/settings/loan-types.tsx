@@ -27,6 +27,7 @@ import {
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { useTheme } from '@/store/useThemeStore';
+import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 import { useLoanProductsStore, LoanProduct } from '@/store/useLoanProductsStore';
 import { InterestType, RatePeriod, RepaymentFrequency, TenureUnit } from '@/lib/finance/types';
 import { CollateralType } from '@/features/loans/types';
@@ -34,6 +35,7 @@ import { CollateralType } from '@/features/loans/types';
 export default function LoanTypesScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { business } = useBusinessSettingsStore();
   const { showSuccess, showError } = useToast();
   const { products, initialize, addProduct, updateProduct, deleteProduct, resetToDefaults } =
     useLoanProductsStore();
@@ -190,7 +192,7 @@ export default function LoanTypesScreen() {
   const handleResetDefaults = () => {
     Alert.alert(
       'Reset Catalog',
-      'Restore all 8 standard Senthur Finance loan schemes (Gold, Monthly, Weekly, Daily, Bike RC, Car RC, Land, House)?',
+      `Restore all 8 standard ${business.businessName || 'Senthur Finance'} loan schemes (Gold, Monthly, Weekly, Daily, Bike RC, Car RC, Land, House)?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -353,7 +355,7 @@ export default function LoanTypesScreen() {
       <View style={styles.resetWrap}>
         <TouchableOpacity onPress={handleResetDefaults} style={styles.resetBtn}>
           <Ionicons name="refresh-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.resetText}>Restore Senthur Finance Default Schemes</Text>
+          <Text style={styles.resetText}>Restore {business.businessName || 'Senthur Finance'} Default Schemes</Text>
         </TouchableOpacity>
       </View>
 

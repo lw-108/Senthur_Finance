@@ -1,18 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   Modal,
   FlatList,
   ViewStyle,
+  Platform,
+  KeyboardAvoidingView,
+  Pressable,
+  PanResponder,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { radii } from '@/theme/spacing';
 import { useTheme } from '@/store/useThemeStore';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export interface SelectOption<T = string> {
   label: string;
@@ -31,6 +42,8 @@ interface SelectModalProps<T = string> {
   error?: string;
   hint?: string;
   containerStyle?: ViewStyle;
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }
 
 export function SelectModal<T = string>({
@@ -43,12 +56,71 @@ export function SelectModal<T = string>({
   error,
   hint,
   containerStyle,
+  searchable,
+  searchPlaceholder,
 }: SelectModalProps<T>) {
   const { colors: dynamicColors } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<TextInput>(null);
 
   const isRequired = required || (label ? label.includes('*') : false);
   const cleanLabel = label ? label.replace(/\s*\*+$/, '') : '';
+
+  const isSearchEnabled =
+    searchable ??
+    (options.length >= 4 ||
+      cleanLabel.toLowerCase().includes('borrower') ||
+      cleanLabel.toLowerCase().includes('customer') ||
+      cleanLabel.toLowerCase().includes('loan'));
+
+  // Reset search and expansion state whenever the modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery('');
+      setIsExpanded(false);
+    }
+  }, [isOpen]);
+
+  const toggleExpand = (forceState?: boolean) => {
+    if (Platform.OS !== 'web') {
+      try {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      } catch {}
+    }
+    setIsExpanded((prev) => (forceState !== undefined ? forceState : !prev));
+  };
+
+  // PanResponder to allow swipe up/down or tap on the top pin handle
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 5,
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy < -20) {
+          // Swiped up: fully expand
+          toggleExpand(true);
+        } else if (gesture.dy > 20) {
+          // Swiped down: retract
+          toggleExpand(false);
+        } else {
+          // Tap / click on pin: toggle
+          toggleExpand();
+        }
+      },
+    })
+  ).current;
+
+  const filteredOptions = useMemo(() => {
+    if (!searchQuery.trim()) return options;
+    const q = searchQuery.toLowerCase().trim();
+    return options.filter((opt) => {
+      const labelMatch = opt.label?.toLowerCase().includes(q);
+      const subtitleMatch = opt.subtitle?.toLowerCase().includes(q);
+      return labelMatch || subtitleMatch;
+    });
+  }, [options, searchQuery]);
 
   const selectedOption = options.find((opt) => opt.value === selectedValue);
 
@@ -109,71 +181,200 @@ export function SelectModal<T = string>({
         animationType="slide"
         onRequestClose={() => setIsOpen(false)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setIsOpen(false)}
-        >
-          <View style={[styles.bottomSheet, { backgroundColor: dynamicColors.surface }]} onStartShouldSetResponder={() => true}>
-            <View style={[styles.dragHandle, { backgroundColor: dynamicColors.borderStrong }]} />
-            <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, { color: dynamicColors.ink }]}>{label || 'Select'}</Text>
-              <TouchableOpacity onPress={() => setIsOpen(false)}>
-                <Ionicons name="close" size={24} color={dynamicColors.ink} />
-              </TouchableOpacity>
-            </View>
+        <View style={styles.modalOverlay}>
+          {/* Backdrop */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setIsOpen(false)}
+            accessibilityLabel="Close dialog"
+          />
 
-            <FlatList
-              data={options}
-              keyExtractor={(item) => String(item.value)}
-              contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => {
-                const isSelected = item.value === selectedValue;
-                return (
-                  <TouchableOpacity
-                    onPress={() => handleSelect(item.value)}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.keyboardAvoidWrap}
+            pointerEvents="box-none"
+          >
+            <View
+              style={[
+                styles.bottomSheet,
+                isExpanded ? styles.bottomSheetExpanded : styles.bottomSheetRetracted,
+                { backgroundColor: dynamicColors.surface },
+              ]}
+            >
+              {/* TOP PIN CONTROLLER: User-only Expand & Retract */}
+              <TouchableOpacity
+                onPress={() => toggleExpand()}
+                activeOpacity={0.7}
+                style={styles.dragHandleContainer}
+                accessibilityRole="button"
+                accessibilityLabel={isExpanded ? 'Retract dialog' : 'Fully expand dialog'}
+              >
+                <View
+                  style={[
+                    styles.dragHandle,
+                    {
+                      backgroundColor: isExpanded
+                        ? dynamicColors.primary
+                        : dynamicColors.borderStrong,
+                    },
+                  ]}
+                />
+                <View style={styles.pinIndicatorRow}>
+                </View>
+              </TouchableOpacity>
+
+              <View style={[styles.sheetHeader, { borderBottomColor: dynamicColors.border }]}>
+                <Text style={[styles.sheetTitle, { color: dynamicColors.ink }]}>
+                  {cleanLabel || 'Select'}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setIsOpen(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="close" size={24} color={dynamicColors.ink} />
+                </TouchableOpacity>
+              </View>
+
+              {isSearchEnabled && (
+                <View
+                  style={[
+                    styles.searchBar,
+                    {
+                      backgroundColor: dynamicColors.surfaceMuted,
+                      borderColor: dynamicColors.border,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="search-outline"
+                    size={18}
+                    color={dynamicColors.textSecondary}
+                    style={styles.searchIcon}
+                  />
+                  <TextInput
+                    ref={searchInputRef}
                     style={[
-                      styles.optionRow,
-                      isSelected && [styles.optionSelected, { backgroundColor: dynamicColors.primarySoft }],
+                      styles.searchInput,
+                      { color: dynamicColors.ink },
+                      Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {},
                     ]}
-                  >
-                    <View style={styles.optionLeft}>
-                      {item.icon && (
+                    placeholder={
+                      searchPlaceholder ||
+                      `Search ${cleanLabel.toLowerCase() || 'options'}...`
+                    }
+                    placeholderTextColor={dynamicColors.textTertiary}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    clearButtonMode="while-editing"
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setSearchQuery('')}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons
+                        name="close-circle"
+                        size={18}
+                        color={dynamicColors.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              <FlatList
+                data={filteredOptions}
+                keyExtractor={(item) => String(item.value)}
+                style={styles.flatList}
+                contentContainerStyle={styles.listContent}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => {
+                  const isSelected = item.value === selectedValue;
+                  return (
+                    <TouchableOpacity
+                      onPress={() => handleSelect(item.value)}
+                      style={[
+                        styles.optionRow,
+                        isSelected && [
+                          styles.optionSelected,
+                          { backgroundColor: dynamicColors.primarySoft },
+                        ],
+                      ]}
+                    >
+                      <View style={styles.optionLeft}>
+                        {item.icon && (
+                          <Ionicons
+                            name={item.icon}
+                            size={20}
+                            color={
+                              isSelected
+                                ? dynamicColors.primaryDark
+                                : dynamicColors.textSecondary
+                            }
+                            style={styles.optionIcon}
+                          />
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={[
+                              styles.optionLabel,
+                              {
+                                color: isSelected
+                                  ? dynamicColors.primaryDark
+                                  : dynamicColors.ink,
+                              },
+                            ]}
+                          >
+                            {item.label}
+                          </Text>
+                          {item.subtitle && (
+                            <Text
+                              style={[
+                                styles.optionSubtitle,
+                                { color: dynamicColors.textSecondary },
+                              ]}
+                            >
+                              {item.subtitle}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+
+                      {isSelected && (
                         <Ionicons
-                          name={item.icon}
-                          size={20}
-                          color={isSelected ? dynamicColors.primaryDark : dynamicColors.textSecondary}
-                          style={styles.optionIcon}
+                          name="checkmark-circle"
+                          size={22}
+                          color={dynamicColors.primary}
                         />
                       )}
-                      <View>
-                        <Text
-                          style={[
-                            styles.optionLabel,
-                            { color: isSelected ? dynamicColors.primaryDark : dynamicColors.ink },
-                          ]}
-                        >
-                          {item.label}
-                        </Text>
-                        {item.subtitle && (
-                          <Text style={[styles.optionSubtitle, { color: dynamicColors.textSecondary }]}>{item.subtitle}</Text>
-                        )}
-                      </View>
-                    </View>
-
-                    {isSelected && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={22}
-                        color={dynamicColors.primary}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          </View>
-        </TouchableOpacity>
+                    </TouchableOpacity>
+                  );
+                }}
+                ListEmptyComponent={
+                  <View style={styles.emptySearchWrap}>
+                    <Ionicons
+                      name="search-outline"
+                      size={32}
+                      color={dynamicColors.textTertiary}
+                    />
+                    <Text
+                      style={[
+                        styles.emptySearchText,
+                        { color: dynamicColors.textSecondary },
+                      ]}
+                    >
+                      {searchQuery.trim()
+                        ? `No options found matching "${searchQuery}"`
+                        : 'No options available'}
+                    </Text>
+                  </View>
+                }
+              />
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </View>
   );
@@ -229,21 +430,57 @@ const styles = StyleSheet.create({
     backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
+  keyboardAvoidWrap: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'flex-end',
+  },
   bottomSheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radii.modal,
     borderTopRightRadius: radii.modal,
-    maxHeight: '75%',
     paddingBottom: 24,
+    width: '100%',
+    ...(Platform.OS === 'web'
+      ? ({ transition: 'height 0.28s cubic-bezier(0.4, 0, 0.2, 1)' } as any)
+      : {}),
+  },
+  bottomSheetRetracted: {
+    height: '58%',
+    maxHeight: '60%',
+  },
+  bottomSheetExpanded: {
+    height: '95%',
+    maxHeight: '96%',
+  },
+  flatList: {
+    flex: 1,
+  },
+  dragHandleContainer: {
+    paddingTop: 10,
+    paddingBottom: 6,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : {}),
   },
   dragHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: colors.borderStrong,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 8,
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    marginBottom: 4,
+  },
+  pinIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  pinActionText: {
+    ...typography.caption,
+    fontSize: 10,
+    fontFamily: typography.fontAmount,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -258,6 +495,37 @@ const styles = StyleSheet.create({
     ...typography.subheading,
     fontFamily: typography.fontHeadline,
     color: colors.ink,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    borderRadius: radii.sm + 4,
+    borderWidth: 1,
+    minHeight: 44,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    ...typography.body,
+    fontSize: 14,
+    paddingVertical: 8,
+    backgroundColor: 'transparent',
+  },
+  emptySearchWrap: {
+    paddingVertical: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptySearchText: {
+    ...typography.captionMedium,
+    textAlign: 'center',
   },
   listContent: {
     paddingHorizontal: 16,

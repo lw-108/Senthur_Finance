@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { getActiveOrganizationId, DEFAULT_ORG_ID } from '@/lib/supabase/activeOrg';
 import { secureStorage } from '@/lib/storage/secureStorage';
 import {
   InterestType,
@@ -225,15 +225,23 @@ export const useLoanProductsStore = create<LoanProductsState>((set, get) => ({
       const local = await secureStorage.getItem(LOAN_PRODUCTS_KEY);
       let products: LoanProduct[] = local ? JSON.parse(local) : DEFAULT_LOAN_PRODUCTS;
 
-      // Sync from Firestore if available
-      try {
-        const ref = doc(db, 'settings', 'loan_products');
-        const snap = await getDoc(ref);
-        if (snap.exists() && snap.data().products) {
-          products = snap.data().products;
+      // Sync from Supabase organization_settings if available
+      if (isSupabaseConfigured()) {
+        try {
+          const orgId = await getActiveOrganizationId();
+          if (orgId && orgId !== DEFAULT_ORG_ID) {
+            const { data, error } = await (supabase.from('organization_settings') as any)
+              .select('loan_products')
+              .eq('organization_id', orgId)
+              .maybeSingle();
+
+            if (!error && data?.loan_products && Array.isArray(data.loan_products) && data.loan_products.length > 0) {
+              products = data.loan_products as LoanProduct[];
+            }
+          }
+        } catch {
+          // Offline
         }
-      } catch (e) {
-        // Offline
       }
 
       set({ products, isLoaded: true });
@@ -254,10 +262,19 @@ export const useLoanProductsStore = create<LoanProductsState>((set, get) => ({
     set({ products: nextProducts });
 
     await secureStorage.setItem(LOAN_PRODUCTS_KEY, JSON.stringify(nextProducts));
-    try {
-      const ref = doc(db, 'settings', 'loan_products');
-      await setDoc(ref, { products: nextProducts }, { merge: true });
-    } catch {}
+    if (isSupabaseConfigured()) {
+      try {
+        const orgId = await getActiveOrganizationId();
+        if (orgId && orgId !== DEFAULT_ORG_ID) {
+          await (supabase.from('organization_settings') as any)
+            .upsert({
+              organization_id: orgId,
+              loan_products: nextProducts,
+              updated_at: new Date().toISOString(),
+            });
+        }
+      } catch {}
+    }
   },
 
   updateProduct: async (id, updates) => {
@@ -265,10 +282,19 @@ export const useLoanProductsStore = create<LoanProductsState>((set, get) => ({
     set({ products: nextProducts });
 
     await secureStorage.setItem(LOAN_PRODUCTS_KEY, JSON.stringify(nextProducts));
-    try {
-      const ref = doc(db, 'settings', 'loan_products');
-      await setDoc(ref, { products: nextProducts }, { merge: true });
-    } catch {}
+    if (isSupabaseConfigured()) {
+      try {
+        const orgId = await getActiveOrganizationId();
+        if (orgId && orgId !== DEFAULT_ORG_ID) {
+          await (supabase.from('organization_settings') as any)
+            .upsert({
+              organization_id: orgId,
+              loan_products: nextProducts,
+              updated_at: new Date().toISOString(),
+            });
+        }
+      } catch {}
+    }
   },
 
   deleteProduct: async (id) => {
@@ -276,18 +302,36 @@ export const useLoanProductsStore = create<LoanProductsState>((set, get) => ({
     set({ products: nextProducts });
 
     await secureStorage.setItem(LOAN_PRODUCTS_KEY, JSON.stringify(nextProducts));
-    try {
-      const ref = doc(db, 'settings', 'loan_products');
-      await setDoc(ref, { products: nextProducts }, { merge: true });
-    } catch {}
+    if (isSupabaseConfigured()) {
+      try {
+        const orgId = await getActiveOrganizationId();
+        if (orgId && orgId !== DEFAULT_ORG_ID) {
+          await (supabase.from('organization_settings') as any)
+            .upsert({
+              organization_id: orgId,
+              loan_products: nextProducts,
+              updated_at: new Date().toISOString(),
+            });
+        }
+      } catch {}
+    }
   },
 
   resetToDefaults: async () => {
     set({ products: DEFAULT_LOAN_PRODUCTS });
     await secureStorage.setItem(LOAN_PRODUCTS_KEY, JSON.stringify(DEFAULT_LOAN_PRODUCTS));
-    try {
-      const ref = doc(db, 'settings', 'loan_products');
-      await setDoc(ref, { products: DEFAULT_LOAN_PRODUCTS }, { merge: true });
-    } catch {}
+    if (isSupabaseConfigured()) {
+      try {
+        const orgId = await getActiveOrganizationId();
+        if (orgId && orgId !== DEFAULT_ORG_ID) {
+          await (supabase.from('organization_settings') as any)
+            .upsert({
+              organization_id: orgId,
+              loan_products: DEFAULT_LOAN_PRODUCTS,
+              updated_at: new Date().toISOString(),
+            });
+        }
+      } catch {}
+    }
   },
 }));

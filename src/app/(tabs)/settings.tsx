@@ -3,9 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  Switch,
   TouchableOpacity,
-  Alert,
   Image,
   Modal,
   ScrollView,
@@ -15,8 +13,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { updatePassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase/config';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import {
   Screen,
   DisplayTitle,
@@ -26,18 +23,25 @@ import {
   SegmentedControl,
   Input,
   SelectModal,
-  Badge,
+  ConfirmDialog,
   useToast,
   PinCodeInput,
 } from '@/components/ui';
-import { colors, AccentColor, ThemeMode, ACCENT_PALETTES } from '@/theme/colors';
+import { colors, AccentColor, ThemeMode } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useThemeStore, useTheme } from '@/store/useThemeStore';
 import { Toggle } from '@/components/ui/Toggle';
 import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 import { useLoanProductsStore } from '@/store/useLoanProductsStore';
-import { exportCsvReport, shareFile } from '@/features/reports/exportEngine';
+import { InitialSetupModal } from '@/components/onboarding/InitialSetupModal';
+import {
+  exportJsonReport,
+  exportBorrowersCsv,
+  exportLoansCsv,
+  exportPaymentsCsv,
+  shareFile,
+} from '@/features/reports/exportEngine';
 import { useCustomers } from '@/features/customers/hooks';
 import { useLoans } from '@/features/loans/hooks';
 import { usePayments } from '@/features/payments/hooks';
@@ -49,12 +53,14 @@ export default function SettingsScreen() {
 
   const {
     user,
+    storedUser,
     isLockEnabled,
     setLockEnabled,
+    isBiometricAvailable,
+    isBiometricEnabled,
+    setBiometricEnabled,
     setupPin,
     signOut,
-    isBiometricAvailable,
-    unlockWithBiometrics,
     setUserPassword,
     updatePhotoURL,
   } = useAuthStore();
@@ -90,6 +96,8 @@ export default function SettingsScreen() {
   const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [signOutConfirmVisible, setSignOutConfirmVisible] = useState(false);
+  const [setupWizardVisible, setSetupWizardVisible] = useState(false);
 
   // Business Profile Form
   const [bizName, setBizName] = useState(business.businessName);
@@ -120,7 +128,7 @@ export default function SettingsScreen() {
     initializeProducts();
   }, [initializeBusiness, initializeProducts]);
 
-  useEffect(() => {
+  const openProfileModal = () => {
     setBizName(business.businessName);
     setBizTagline(business.tagline);
     setBizOwner(business.ownerName);
@@ -129,15 +137,17 @@ export default function SettingsScreen() {
     setBizCity(business.city);
     setBizAddress(business.address);
     setBizLicense(business.licenseNumber);
-  }, [business]);
+    setProfileModalVisible(true);
+  };
 
-  useEffect(() => {
+  const openCurrencyModal = () => {
     setCurrSymbol(currency.currencySymbol);
     setNumFormat(currency.numberFormat);
     setFyMonth(currency.financialYearStartMonth.toString());
-  }, [currency]);
+    setCurrencyModalVisible(true);
+  };
 
-  // Avatar Image Picker
+  // Avatar Image Picker with Permanent Base64 Storage
   const handlePickAvatar = async () => {
     try {
       const res = await ImagePicker.launchImageLibraryAsync({
@@ -151,24 +161,41 @@ export default function SettingsScreen() {
         const asset = res.assets[0];
         let avatarUri = asset.uri;
 
-        try {
-          const manip = await ImageManipulator.manipulateAsync(
-            asset.uri,
-            [{ resize: { width: 300, height: 300 } }],
-            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-          );
-          if (manip.base64) {
-            avatarUri = `data:image/jpeg;base64,${manip.base64}`;
-          }
-        } catch { }
+        if (asset.base64) {
+          avatarUri = asset.base64.startsWith('data:')
+            ? asset.base64
+            : `data:image/jpeg;base64,${asset.base64}`;
+        } else {
+          try {
+            const manip = await ImageManipulator.manipulateAsync(
+              asset.uri,
+              [{ resize: { width: 300, height: 300 } }],
+              { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+            );
+            if (manip.base64) {
+              avatarUri = `data:image/jpeg;base64,${manip.base64}`;
+            }
+          } catch {}
+        }
 
         await setPermanentAvatar(avatarUri);
         await updateAvatar(avatarUri);
         await updatePhotoURL(avatarUri);
-        showSuccess('Profile photo updated');
+        showSuccess('Profile photo updated successfully');
       }
     } catch {
       showError('Failed to pick profile image');
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    try {
+      await setPermanentAvatar('');
+      await updateAvatar('');
+      await updatePhotoURL('');
+      showSuccess('Profile photo reset');
+    } catch {
+      showError('Failed to remove photo');
     }
   };
 
@@ -201,13 +228,21 @@ export default function SettingsScreen() {
 
   // Save Currency Settings
   const handleSaveCurrencySettings = async () => {
+    const codeMap: Record<string, string> = {
+      '₹': 'INR',
+      '$': 'USD',
+      '€': 'EUR',
+      '£': 'GBP',
+      'AED': 'AED',
+    };
     await updateCurrencySettings({
       currencySymbol: currSymbol,
+      currencyCode: codeMap[currSymbol] || 'INR',
       numberFormat: numFormat as 'indian' | 'international',
       financialYearStartMonth: parseInt(fyMonth, 10) || 4,
     });
     safelyCloseModal(setCurrencyModalVisible);
-    showSuccess('Currency & locale settings saved');
+    showSuccess('Currency & regional settings saved');
   };
 
   // Save New PIN
@@ -239,11 +274,14 @@ export default function SettingsScreen() {
     }
 
     try {
-      if (auth.currentUser) {
+      if (isSupabaseConfigured()) {
         try {
-          await updatePassword(auth.currentUser, newPassword);
-        } catch (authErr: any) {
-          console.warn('Firebase updatePassword notice:', authErr?.message);
+          const { error: sbErr } = await supabase.auth.updateUser({ password: newPassword });
+          if (sbErr) {
+            console.warn('[Supabase Auth] updateUser password notice:', sbErr.message);
+          }
+        } catch (sbEx: any) {
+          console.warn('[Supabase Auth] updateUser exception:', sbEx?.message);
         }
       }
       await setUserPassword(newPassword);
@@ -256,18 +294,7 @@ export default function SettingsScreen() {
     }
   };
 
-  // Biometric Unlock — validates fingerprint/FaceID and unlocks the app
-  const handleBiometricUnlock = async () => {
-    const success = await unlockWithBiometrics();
-    if (success) {
-      showSuccess('Biometrics verified — app unlocked!');
-      router.replace('/' as any);
-    } else {
-      showError('Biometric verification cancelled or failed');
-    }
-  };
-
-  // Full Ledger Backup
+  // Full Ledger Backup (Direct JSON Download)
   const handleExportFullBackup = async () => {
     try {
       const backupData = {
@@ -275,33 +302,57 @@ export default function SettingsScreen() {
         version: '1.0.0',
         business,
         currency,
-        loanProducts,
+        loanProducts: loanProducts || [],
         customers: customers || [],
         loans: loans || [],
         payments: payments || [],
       };
-      const jsonStr = JSON.stringify(backupData, null, 2);
-      const uri = await exportCsvReport('SenthurFinance_Complete_Backup', ['full_ledger_json'], [[jsonStr]]);
-      await shareFile(uri, 'Senthur Finance Complete Ledger JSON');
-      showSuccess('Backup exported successfully');
+      const safeName = (business.businessName || 'LoanLedger').replace(/[^a-zA-Z0-9]/g, '_');
+      const uri = await exportJsonReport(`${safeName}_Complete_Backup`, backupData);
+      await shareFile(uri, `${business.businessName || 'LoanLedger'} Complete Ledger JSON`, 'application/json');
+      showSuccess('Full Ledger JSON backup downloaded');
     } catch {
       showError('Failed to generate full backup');
     }
   };
 
-  const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to log out of the admin session?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          showSuccess('Logged out successfully');
-          router.replace('/auth/login' as any);
-        },
-      },
-    ]);
+  // Quick CSV Exporters
+  const handleExportBorrowersCsv = async () => {
+    try {
+      const uri = await exportBorrowersCsv(customers || []);
+      await shareFile(uri, 'Borrowers List CSV', 'text/csv');
+      showSuccess('Borrowers roster CSV downloaded');
+    } catch {
+      showError('Failed to export borrowers CSV');
+    }
+  };
+
+  const handleExportLoansCsv = async () => {
+    try {
+      const uri = await exportLoansCsv(loans || []);
+      await shareFile(uri, 'Loans Ledger CSV', 'text/csv');
+      showSuccess('Loans ledger CSV downloaded');
+    } catch {
+      showError('Failed to export loans CSV');
+    }
+  };
+
+  const handleExportPaymentsCsv = async () => {
+    try {
+      const uri = await exportPaymentsCsv(payments || []);
+      await shareFile(uri, 'Repayments Ledger CSV', 'text/csv');
+      showSuccess('Repayments history CSV downloaded');
+    } catch {
+      showError('Failed to export repayments CSV');
+    }
+  };
+
+  // Sign Out Handler with Cross-Platform ConfirmDialog
+  const handleConfirmSignOut = async () => {
+    setSignOutConfirmVisible(false);
+    await signOut();
+    showSuccess('Logged out successfully');
+    router.replace('/auth/login' as any);
   };
 
   const colorSwatches: { key: AccentColor; label: string; color: string }[] = [
@@ -312,6 +363,8 @@ export default function SettingsScreen() {
     { key: 'rose', label: 'Rose', color: '#F43F5E' },
     { key: 'slate', label: 'Slate', color: '#64748B' },
   ];
+
+  const hasCustomAvatar = Boolean(business.avatarUrl || storedUser?.photoURL || permanentAvatar);
 
   return (
     <Screen scrollable>
@@ -325,9 +378,9 @@ export default function SettingsScreen() {
         <Card variant="surface" style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
           <View style={styles.profileHeaderRow}>
             <TouchableOpacity onPress={handlePickAvatar} activeOpacity={0.8} style={styles.avatarWrap}>
-              {business.avatarUrl || user?.photoURL || permanentAvatar ? (
+              {hasCustomAvatar ? (
                 <Image
-                  source={{ uri: business.avatarUrl || user?.photoURL || permanentAvatar }}
+                  source={{ uri: business.avatarUrl || storedUser?.photoURL || permanentAvatar }}
                   style={[styles.avatarImage, { borderColor: colors.primary }]}
                 />
               ) : (
@@ -345,7 +398,7 @@ export default function SettingsScreen() {
             <View style={styles.profileTextWrap}>
               <Text style={[styles.profileBizName, { color: colors.ink }]}>{business.businessName}</Text>
 
-              {/* Admin Identity with Shifted Verified Shield Badge */}
+              {/* Admin Identity with Verified Shield Badge */}
               <View style={styles.adminRow}>
                 <Text style={[styles.profileOwnerName, { color: colors.textSecondary }]}>
                   {business.ownerName || 'Admin'}
@@ -366,23 +419,18 @@ export default function SettingsScreen() {
                 </View>
               </View>
 
-              <Text style={[styles.profileEmail, { color: colors.textTertiary }]}>{user?.email || business.email}</Text>
+              <Text style={[styles.profileEmail, { color: colors.textTertiary }]}>{user?.email || business.email || 'admin@ledger.local'}</Text>
 
-              {business.licenseNumber ? (
-                <View
-                  style={[
-                    styles.licenseBadge,
-                    {
-                      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : colors.surfaceMuted,
-                      borderColor: isDark ? colors.border : 'transparent',
-                      borderWidth: isDark ? 1 : 0,
-                    },
-                  ]}
-                >
-                  <Ionicons name="ribbon-outline" size={12} color={colors.textSecondary} />
-                  <Text style={[styles.licenseText, { color: colors.textSecondary }]}>{business.licenseNumber}</Text>
-                </View>
-              ) : null}
+              <View style={styles.avatarActionsRow}>
+                <TouchableOpacity onPress={handlePickAvatar} style={styles.avatarActionBtn}>
+                  <Text style={[styles.avatarActionText, { color: colors.primaryDark }]}>Change Photo</Text>
+                </TouchableOpacity>
+                {hasCustomAvatar && (
+                  <TouchableOpacity onPress={handleRemoveAvatar} style={styles.avatarActionBtn}>
+                    <Text style={[styles.avatarActionText, { color: colors.danger }]}>Remove</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
         </Card>
@@ -442,49 +490,60 @@ export default function SettingsScreen() {
         </Card>
       </View>
 
-      {/* SECURITY & AUTHENTICATION */}
+      {/* SECURITY & ACCESS CONTROL */}
       <View style={styles.section}>
         <Text style={[styles.sectionHeader, { color: colors.headingPrimary }]}>SECURITY & ACCESS CONTROL</Text>
         <Card variant="surface" style={styles.card}>
           <ListRow
-            title="Biometric & PIN App Lock"
-            subtitle="Require FaceID / Fingerprint / PIN on open"
-            iconName="finger-print-outline"
+            title="PIN & Password App Lock"
+            subtitle="Require PIN or password when opening the application"
+            iconName="lock-closed-outline"
             rightNode={
               <Toggle
                 value={isLockEnabled}
-                onValueChange={(val) => setLockEnabled(val)}
+                onValueChange={(val) => {
+                  setLockEnabled(val);
+                  showSuccess(val ? 'App lock enabled' : 'App lock disabled');
+                }}
+              />
+            }
+          />
+
+          <ListRow
+            title="Biometric Authentication"
+            subtitle={
+              isBiometricAvailable
+                ? `Quick unlock with ${Platform.OS === 'ios' ? 'FaceID / TouchID' : 'Fingerprint'}`
+                : 'Biometric hardware not enrolled or available'
+            }
+            iconName="finger-print-outline"
+            rightNode={
+              <Toggle
+                value={isBiometricEnabled && isBiometricAvailable}
+                disabled={!isBiometricAvailable}
+                onValueChange={(val) => {
+                  setBiometricEnabled(val);
+                  showSuccess(val ? 'Biometric unlock enabled' : 'Biometric unlock disabled');
+                }}
               />
             }
           />
 
           <ListRow
             title="Setup / Change Security PIN"
-            subtitle="4-digit quick passcode for admin access"
-            iconName="lock-closed-outline"
+            subtitle="4-digit quick passcode for rapid admin lock"
+            iconName="keypad-outline"
             showChevron
             onPress={() => setPinModalVisible(true)}
           />
 
           <ListRow
             title="Change Admin Password"
-            subtitle="Update Firebase account master password"
+            subtitle="Update account master security password"
             iconName="key-outline"
             showChevron
             onPress={() => setPasswordModalVisible(true)}
           />
-
-          {isBiometricAvailable && (
-            <ListRow
-              title="Unlock with Fingerprint / FaceID"
-              subtitle="Use biometrics to unlock and open the app"
-              iconName="finger-print-outline"
-              iconColor={colors.primaryDark}
-              iconBgColor={colors.primarySoft}
-              showChevron
-              onPress={handleBiometricUnlock}
-            />
-          )}
         </Card>
       </View>
 
@@ -497,7 +556,7 @@ export default function SettingsScreen() {
             subtitle={`${business.businessName} • ${business.city}`}
             iconName="business-outline"
             showChevron
-            onPress={() => setProfileModalVisible(true)}
+            onPress={openProfileModal}
           />
 
           <ListRow
@@ -505,7 +564,7 @@ export default function SettingsScreen() {
             subtitle={`${currency.currencySymbol} ${currency.currencyCode} • ${currency.numberFormat === 'indian' ? 'Lakhs & Crores' : 'Millions & Billions'}`}
             iconName="cash-outline"
             showChevron
-            onPress={() => setCurrencyModalVisible(true)}
+            onPress={openCurrencyModal}
           />
 
           <ListRow
@@ -515,29 +574,71 @@ export default function SettingsScreen() {
             showChevron
             onPress={() => router.push('/settings/loan-types' as any)}
           />
+
+          <ListRow
+            title="Initial Setup Wizard"
+            subtitle="Reconfigure organization name, theme mode, accent & permissions"
+            iconName="sparkles-outline"
+            iconColor={colors.primaryDark}
+            iconBgColor={colors.primarySoft}
+            showChevron
+            onPress={() => setSetupWizardVisible(true)}
+          />
         </Card>
       </View>
 
-      {/* DATA, BACKUP & EXPORTS */}
+      {/* DATA, BACKUP & QUICK EXPORTS */}
       <View style={styles.section}>
-        <Text style={[styles.sectionHeader, { color: colors.headingPrimary }]}>DATA & BACKUP</Text>
+        <Text style={[styles.sectionHeader, { color: colors.headingPrimary }]}>DATA, BACKUP & EXPORTS</Text>
         <Card variant="surface" style={styles.card}>
           <ListRow
-            title="Reports & PDF Exports"
-            subtitle="Daily collection sheets, overdue audits & statement PDFs"
+            title="Reports & Statements Hub"
+            subtitle="Generate daily collection sheets, overdue audits & borrower statements"
             iconName="document-text-outline"
+            iconColor={colors.primaryDark}
+            iconBgColor={colors.primarySoft}
             showChevron
             onPress={() => router.push('/reports' as any)}
           />
 
           <ListRow
             title="Full Ledger Backup (JSON)"
-            subtitle="Complete offline snapshot of all borrowers, loans & settings"
+            subtitle="Complete offline JSON snapshot of all borrowers, loans, receipts & settings"
             iconName="cloud-download-outline"
             iconColor={colors.primaryDark}
             iconBgColor={colors.primarySoft}
             showChevron
             onPress={handleExportFullBackup}
+          />
+
+          <ListRow
+            title="Export Borrowers Roster (CSV)"
+            subtitle="Download complete customer list with contact, KYC & balances"
+            iconName="people-outline"
+            iconColor={colors.success}
+            iconBgColor={colors.successLight}
+            showChevron
+            onPress={handleExportBorrowersCsv}
+          />
+
+          <ListRow
+            title="Export All Loans Ledger (CSV)"
+            subtitle="Download all active and closed loan accounts with interest rates & balance"
+            iconName="grid-outline"
+            iconColor={colors.success}
+            iconBgColor={colors.successLight}
+            showChevron
+            onPress={handleExportLoansCsv}
+          />
+
+          <ListRow
+            title="Export Repayments History (CSV)"
+            subtitle="Download collection receipts ledger with modes and timestamps"
+            iconName="receipt-outline"
+            iconColor={colors.success}
+            iconBgColor={colors.successLight}
+            showChevron
+            onPress={handleExportPaymentsCsv}
           />
         </Card>
       </View>
@@ -547,11 +648,11 @@ export default function SettingsScreen() {
         <Card variant="surface" style={styles.card}>
           <ListRow
             title="Sign Out Session"
-            subtitle="Close admin session and lock app"
+            subtitle="Close admin session and lock application"
             iconName="log-out-outline"
             iconColor={colors.danger}
             iconBgColor={colors.dangerLight}
-            onPress={handleSignOut}
+            onPress={() => setSignOutConfirmVisible(true)}
           />
         </Card>
       </View>
@@ -560,9 +661,16 @@ export default function SettingsScreen() {
       <View style={[styles.disclaimerBox, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
         <Text style={[styles.disclaimerTitle, { color: colors.headingPrimary }]}>LEGAL DISCLAIMER</Text>
         <Text style={[styles.disclaimerText, { color: colors.textSecondary }]}>
-          Senthur Finance is a private record-keeping and audit tool for money lenders. The admin is solely responsible for compliance with the Moneylenders Act and local financial guidelines.
+          {business.businessName || 'This application'} is a private record-keeping and audit tool for money lenders. The admin is solely responsible for compliance with the Moneylenders Act and local financial guidelines.
         </Text>
       </View>
+
+      {/* INITIAL SETUP WIZARD MODAL */}
+      <InitialSetupModal
+        visible={setupWizardVisible}
+        canDismiss
+        onComplete={() => setSetupWizardVisible(false)}
+      />
 
       {/* MODAL 1: BUSINESS PROFILE MODAL */}
       <Modal
@@ -676,7 +784,7 @@ export default function SettingsScreen() {
               />
 
               <SelectModal
-                label="Number Number System"
+                label="Numbering System"
                 selectedValue={numFormat}
                 onSelect={(val) => setNumFormat(val as any)}
                 options={[
@@ -842,6 +950,19 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* CONFIRM SIGN OUT DIALOG */}
+      <ConfirmDialog
+        visible={signOutConfirmVisible}
+        title="Sign Out Session"
+        message="Are you sure you want to log out of the admin session? You will need your credentials or PIN to sign back in."
+        confirmLabel="Sign Out"
+        cancelLabel="Cancel"
+        isDestructive
+        icon="log-out-outline"
+        onConfirm={handleConfirmSignOut}
+        onCancel={() => setSignOutConfirmVisible(false)}
+      />
     </Screen>
   );
 }
@@ -948,22 +1069,18 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: 1,
   },
-  licenseBadge: {
+  avatarActionsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.primarySoft,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    gap: 12,
     marginTop: 6,
-    alignSelf: 'flex-start',
   },
-  licenseText: {
+  avatarActionBtn: {
+    paddingVertical: 2,
+  },
+  avatarActionText: {
     fontFamily: typography.fontHeadline,
-    fontSize: 10,
-    color: colors.primaryDark,
-    letterSpacing: 0.8,
+    fontSize: 11,
+    fontWeight: '700',
   },
   themeModeWrap: {
     padding: 10,
@@ -994,9 +1111,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 4,
     borderRadius: 12,
-  },
-  swatchItemSelected: {
-    backgroundColor: colors.surfaceMuted,
   },
   swatchCircle: {
     width: 42,

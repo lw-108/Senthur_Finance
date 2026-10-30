@@ -1,0 +1,92 @@
+- generic [ref=f5e1]:
+  - generic [ref=f5e12]:
+    - generic [ref=f5e16]: FINANCE LEDGER
+    - generic [ref=f5e19]:
+      - generic [ref=f5e20]:
+        - button "Log In" [ref=f5e21] [cursor=pointer]
+        - button "Sign Up" [ref=f5e23] [cursor=pointer]
+      - generic [ref=f5e25]:
+        - generic [ref=f5e26]: By continuing, you agree to the ledger
+        - generic [ref=f5e27]:
+          - generic [ref=f5e28] [cursor=pointer]: Privacy Policy
+          - generic [ref=f5e30]: and
+          - generic [ref=f5e31] [cursor=pointer]: Terms of Use
+  - dialog [ref=f5e34]:
+    - generic [ref=f5e38]:
+      - generic [ref=f5e39]:
+        - generic [ref=f5e40]:
+          - generic [ref=f5e41]: 
+          - generic [ref=f5e42]: INITIAL APP SETUP
+        - generic [ref=f5e43]: Setup Your Workspace
+        - generic [ref=f5e44]: Configure your organization branding, visual style, and permissions. You can change these anytime in Settings.
+      - generic [ref=f5e45]:
+        - generic [ref=f5e46]:
+          - generic [ref=f5e47]: 
+          - generic [ref=f5e49]:
+            - generic [ref=f5e50]: Organization Name
+            - generic [ref=f5e51]: Reflected across all loan agreements, statements, receipts & WhatsApp greetings.
+        - textbox "e.g. Acme Microfinance, Sri Balaji Lending" [ref=f5e54]
+      - generic [ref=f5e55]:
+        - generic [ref=f5e56]:
+          - generic [ref=f5e57]: 
+          - generic [ref=f5e59]:
+            - generic [ref=f5e60]: App Theme Mode
+            - generic [ref=f5e61]: Choose your preferred appearance mode.
+        - generic [ref=f5e62]:
+          - generic [ref=f5e63] [cursor=pointer]:
+            - generic [ref=f5e64]: 
+            - generic [ref=f5e65]: System
+          - generic [ref=f5e66] [cursor=pointer]:
+            - generic [ref=f5e67]: 
+            - generic [ref=f5e68]: Light
+          - generic [ref=f5e69] [cursor=pointer]:
+            - generic [ref=f5e70]: 
+            - generic [ref=f5e71]: Dark
+      - generic [ref=f5e72]:
+        - generic [ref=f5e73]:
+          - generic [ref=f5e74]: 
+          - generic [ref=f5e76]:
+            - generic [ref=f5e77]: Color Theme
+            - generic [ref=f5e78]: Select your primary accent branding color.
+        - generic [ref=f5e79]:
+          - generic [ref=f5e80] [cursor=pointer]:
+            - generic [ref=f5e81]: 
+            - generic [ref=f5e83]: Violet
+          - generic [ref=f5e84] [cursor=pointer]: Blue
+          - generic [ref=f5e87] [cursor=pointer]: Emerald
+          - generic [ref=f5e90] [cursor=pointer]: Amber
+          - generic [ref=f5e93] [cursor=pointer]: Rose
+          - generic [ref=f5e96] [cursor=pointer]: Slate
+      - generic [ref=f5e99]:
+        - generic [ref=f5e100]:
+          - generic [ref=f5e101]: 
+          - generic [ref=f5e103]:
+            - generic [ref=f5e104]: Required Permissions
+            - generic [ref=f5e105]: Enable permissions to import borrowers and manage verification documents.
+        - generic [ref=f5e106]:
+          - generic [ref=f5e107]: 
+          - generic [ref=f5e109]:
+            - generic [ref=f5e110]: Device Contacts
+            - generic [ref=f5e111]: Merge contacts into borrower list quickly
+          - generic [ref=f5e112]:
+            - generic [ref=f5e113]: 
+            - generic [ref=f5e114]: Allowed
+        - generic [ref=f5e115]:
+          - generic [ref=f5e116]: 
+          - generic [ref=f5e118]:
+            - generic [ref=f5e119]: Camera Access
+            - generic [ref=f5e120]: Capture KYC document photos & proofs
+          - generic [ref=f5e121]:
+            - generic [ref=f5e122]: 
+            - generic [ref=f5e123]: Allowed
+        - generic [ref=f5e124]:
+          - generic [ref=f5e125]: 
+          - generic [ref=f5e127]:
+            - generic [ref=f5e128]: Photo Library
+            - generic [ref=f5e129]: Upload borrower profile & ID pictures
+          - generic [ref=f5e130]:
+            - generic [ref=f5e131]: 
+            - generic [ref=f5e132]: Allowed
+      - generic [ref=f5e135] [cursor=pointer]:
+        - generic [ref=f5e136]: 
+        - generic [ref=f5e137]: Save & Continue

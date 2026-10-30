@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   ViewStyle,
   Platform,
 } from 'react-native';
@@ -12,6 +13,7 @@ import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { radii } from '@/theme/spacing';
 import { useTheme } from '@/store/useThemeStore';
+import { useKeyboardAware } from './Screen';
 
 interface CurrencyInputProps {
   label?: string;
@@ -25,18 +27,27 @@ interface CurrencyInputProps {
   containerStyle?: ViewStyle;
 }
 
-export function CurrencyInput({
-  label,
-  value,
-  onChangeValue,
-  currencySymbol = '₹',
-  required,
-  error,
-  hint,
-  quickAmounts,
-  containerStyle,
-}: CurrencyInputProps) {
+export const CurrencyInput = forwardRef<TextInput, CurrencyInputProps>(function CurrencyInput(
+  {
+    label,
+    value,
+    onChangeValue,
+    currencySymbol = '₹',
+    required,
+    error,
+    hint,
+    quickAmounts,
+    containerStyle,
+  },
+  forwardedRef
+) {
   const { colors: dynamicColors, isDark } = useTheme();
+  const keyboardAware = useKeyboardAware();
+  const containerRef = useRef<View>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  useImperativeHandle(forwardedRef, () => inputRef.current as TextInput);
+
   const [isFocused, setIsFocused] = useState(false);
 
   const isRequired = required || (label ? label.includes('*') : false);
@@ -55,18 +66,25 @@ export function CurrencyInput({
     onChangeValue(numericValue + preset);
   };
 
+  const handleContainerPress = () => {
+    inputRef.current?.focus();
+  };
+
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View ref={containerRef} style={[styles.container, containerStyle]}>
       {label && (
-        <Text style={[styles.label, { color: dynamicColors.ink }]}>
-          {cleanLabel}
-          {isRequired && (
-            <Text style={{ color: dynamicColors.danger, fontWeight: '700' }}> *</Text>
-          )}
-        </Text>
+        <Pressable onPress={handleContainerPress}>
+          <Text style={[styles.label, { color: dynamicColors.ink }]}>
+            {cleanLabel}
+            {isRequired && (
+              <Text style={{ color: dynamicColors.danger, fontWeight: '700' }}> *</Text>
+            )}
+          </Text>
+        </Pressable>
       )}
 
-      <View
+      <Pressable
+        onPress={handleContainerPress}
         style={[
           styles.inputContainer,
           { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border },
@@ -88,6 +106,7 @@ export function CurrencyInput({
         </Text>
 
         <TextInput
+          ref={inputRef}
           style={[
             styles.input,
             {
@@ -101,7 +120,12 @@ export function CurrencyInput({
           placeholderTextColor={dynamicColors.textTertiary}
           value={stringValue}
           onChangeText={handleChangeText}
-          onFocus={() => setIsFocused(true)}
+          onFocus={() => {
+            setIsFocused(true);
+            if (Platform.OS !== 'web') {
+              keyboardAware?.scrollToFocusedInput(containerRef.current);
+            }
+          }}
           onBlur={() => setIsFocused(false)}
         />
 
@@ -114,7 +138,7 @@ export function CurrencyInput({
             <Text style={[styles.clearText, { color: dynamicColors.textSecondary }]}>✕</Text>
           </TouchableOpacity>
         )}
-      </View>
+      </Pressable>
 
       {/* Optional quick amount presets */}
       {quickAmounts && quickAmounts.length > 0 && (
@@ -143,7 +167,7 @@ export function CurrencyInput({
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

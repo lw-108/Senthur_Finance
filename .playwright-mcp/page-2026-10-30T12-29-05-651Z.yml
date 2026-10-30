@@ -1,0 +1,62 @@
+- generic [ref=e1]:
+  - generic [ref=e68]:
+    - generic [ref=e69]:
+      - button "Go back" [ref=e71] [cursor=pointer]:
+        - generic [ref=e72]: 
+      - generic [ref=e73]: Disburse Loan
+      - button "Admin profile" [ref=e76] [cursor=pointer]:
+        - generic [ref=e77]: GF
+    - generic [ref=e80]:
+      - generic [ref=e81]:
+        - generic [ref=e82]: Step 1 of 5
+        - generic [ref=e83]: Borrower
+      - generic [ref=e84]: "Next: Amount & Rate"
+    - generic [ref=e88]:
+      - generic [ref=e89]:
+        - generic [ref=e90]: Borrower & Purpose
+        - generic [ref=e91]: Choose customer and specify the loan purpose
+      - generic [ref=e92]:
+        - generic [ref=e93]: Select Borrower *
+        - generic [ref=e94] [cursor=pointer]:
+          - generic [ref=e95]: Select option
+          - generic [ref=e96]: 
+      - generic [ref=e97]:
+        - generic [ref=e98]: Loan Product & Scheme *
+        - generic [ref=e99] [cursor=pointer]:
+          - generic [ref=e100]: Select option
+          - generic [ref=e101]: 
+      - generic [ref=e102]:
+        - generic [ref=e103] [cursor=pointer]: Specific Loan Purpose / Description
+        - generic [ref=e105] [cursor=pointer]:
+          - generic [ref=e106]: 
+          - textbox "e.g. Working capital for raw material inventory" [ref=e107]
+    - generic [ref=e110] [cursor=pointer]:
+      - generic [ref=e111]: Amount & Rate
+      - generic [ref=e112]: 
+  - generic:
+    - generic:
+      - generic:
+        - dialog:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - button "Fully expand dialog" [active]:
+                    - generic:
+                      - generic: 
+                      - generic: Pin • Tap to Expand
+                      - generic: 
+                  - generic:
+                    - generic: Select Borrower
+                    - generic: 
+                  - generic:
+                    - generic: 
+                    - textbox "Search borrower by name, phone or city..."
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: Velavan (9098765434)
+                              - generic: Erode

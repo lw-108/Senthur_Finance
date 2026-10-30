@@ -1,0 +1,39 @@
+[   19779ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286
+[   19892ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286
+[  116514ms] SyntaxError: C:\Users\ELCOT\Pictures\SF\SenthurFinance\src\components\ui\SelectModal.tsx: Expected corresponding JSX closing tag for <View>. (388:8)
+
+  386 |             </View>
+  387 |           </KeyboardAvoidingView>
+> 388 |         </TouchableOpacity>
+      |         ^
+  389 |       </Modal>
+  390 |     </View>
+  391 |   );
+[  135351ms] ReferenceError: Pressable is not defined
+    at SelectModal (http://localhost:8081/src/components/ui/SelectModal.bundle//&platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true&minify=false&modulesOnly=true&runModule=false&shallow=true:366:39)
+    at Object.react_stack_bottom_frame (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:18654:20)
+    at renderWithHooks (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:9527:22)
+    at updateFunctionComponent (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:10916:19)
+    at beginWork (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:11485:18)
+    at runWithFiberInDEV (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:6004:70)
+    at performUnitOfWork (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:13912:95)
+    at workLoopSync (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:13807:40)
+    at renderRootSync (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:13792:9)
+    at performWorkOnRoot (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:13465:35)
+    at performSyncWorkOnRoot (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:14575:7)
+    at flushSyncWorkAcrossRoots_impl (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:14490:308)
+    at flushSyncWork$1 (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:13595:84)
+    at Object.scheduleRefresh (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:5417:9)
+    at http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:68917:23
+    at Set.forEach (<anonymous>)
+    at Object.performReactRefresh (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:68909:32)
+    at Object.performReactRefresh (http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:68675:27)
+    at http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:445:21
+[  135346ms] [WARNING] %s
+
+%s
+ An error occurred in the <SelectModal> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286

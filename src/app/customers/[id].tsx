@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import {
   Screen,
   Header,
@@ -30,6 +32,7 @@ import { formatIndianCurrency, maskIdentifier, formatDate } from '@/utils/format
 import { openWhatsApp } from '@/utils/whatsapp';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLoanProductsStore } from '@/store/useLoanProductsStore';
+import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 import { exportCustomerStatementPdf, shareFile } from '@/features/reports/exportEngine';
 
 export default function CustomerDetailScreen() {
@@ -47,6 +50,7 @@ export default function CustomerDetailScreen() {
   const updateMutation = useUpdateCustomer();
   const verifyBiometric = useAuthStore((s) => s.verifyBiometricsForSensitiveAction);
   const { products: loanProducts, initialize: initializeProducts } = useLoanProductsStore();
+  const { business } = useBusinessSettingsStore();
 
   const [activeTab, setActiveTab] = useState<'loans' | 'payments' | 'docs' | 'guarantor'>('loans');
   const [unmaskedId, setUnmaskedId] = useState<string | null>(null);
@@ -114,9 +118,12 @@ export default function CustomerDetailScreen() {
       const uri = await exportCustomerStatementPdf(
         customer,
         customerLoans || [],
-        customerPayments || []
+        customerPayments || [],
+        business.businessName,
+        business.phone,
+        business.address
       );
-      await shareFile(uri, `${customer.fullName} Account Statement`);
+      await shareFile(uri, `${customer.fullName} Account Statement`, 'application/pdf');
       showSuccess('Statement PDF generated');
     } catch {
       showError('Failed to generate PDF statement');
@@ -161,12 +168,55 @@ export default function CustomerDetailScreen() {
     }
   };
 
+  const handlePickPhoto = async () => {
+    if (!customer) return;
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        const asset = res.assets[0];
+        let avatarUri = asset.uri;
+
+        if (asset.base64) {
+          avatarUri = asset.base64.startsWith('data:')
+            ? asset.base64
+            : `data:image/jpeg;base64,${asset.base64}`;
+        } else {
+          try {
+            const manip = await ImageManipulator.manipulateAsync(
+              asset.uri,
+              [{ resize: { width: 300, height: 300 } }],
+              { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+            );
+            if (manip.base64) {
+              avatarUri = `data:image/jpeg;base64,${manip.base64}`;
+            }
+          } catch {}
+        }
+
+        await updateMutation.mutateAsync({
+          customerId: customer.id,
+          updates: { photoUrl: avatarUri },
+        });
+        showSuccess('Borrower photo updated');
+        refetch();
+      }
+    } catch {
+      showError('Failed to update borrower photo');
+    }
+  };
+
   const handleCall = () => {
     Linking.openURL(`tel:${customer.phone}`);
   };
 
   const handleWhatsApp = () => {
-    openWhatsApp(customer.phone, `Hello ${customer.fullName}, greetings from Senthur Finance.`);
+    openWhatsApp(customer.phone, `Hello ${customer.fullName}, greetings from ${business.businessName || 'Senthur Finance'}.`);
   };
 
   const handleSms = () => {
@@ -232,13 +282,23 @@ export default function CustomerDetailScreen() {
 
       {/* Customer Hero Profile Header */}
       <View style={styles.profileHeader}>
-        <Avatar
-          uri={customer.photoUrl}
-          name={customer.fullName}
-          size={68}
-          backgroundColor={dynamicColors.primaryLight}
-          textColor={dynamicColors.primaryDark}
-        />
+        <TouchableOpacity
+          onPress={handlePickPhoto}
+          activeOpacity={0.8}
+          style={styles.avatarTouchable}
+          accessibilityLabel="Change borrower profile picture"
+        >
+          <Avatar
+            uri={customer.photoUrl}
+            name={customer.fullName}
+            size={70}
+            backgroundColor={dynamicColors.primaryLight}
+            textColor={dynamicColors.primaryDark}
+          />
+          <View style={[styles.avatarCameraBadge, { backgroundColor: dynamicColors.primaryDark, borderColor: dynamicColors.surface }]}>
+            <Ionicons name="camera" size={13} color="#FFFFFF" />
+          </View>
+        </TouchableOpacity>
         <View style={styles.profileInfo}>
           <Text style={[styles.customerName, { color: dynamicColors.ink }]}>{customer.fullName}</Text>
           <Text style={[styles.customerPhone, { color: dynamicColors.textSecondary }]}>+91 {customer.phone}</Text>
@@ -257,35 +317,35 @@ export default function CustomerDetailScreen() {
         </View>
       </View>
 
-      {/* Quick Action Buttons: Call, WhatsApp, SMS, Share */}
+      {/* Quick Action Buttons: Pill icons alone without text */}
       <View style={styles.quickActionsRow}>
         <TouchableOpacity
           style={[styles.quickActionBtn, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}
           onPress={handleCall}
+          accessibilityLabel="Call borrower"
         >
-          <Ionicons name="call" size={17} color={dynamicColors.primaryDark} />
-          <Text style={[styles.quickActionText, { color: dynamicColors.ink }]}>Call</Text>
+          <Ionicons name="call" size={18} color={dynamicColors.primaryDark} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.quickActionBtn, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}
           onPress={handleWhatsApp}
+          accessibilityLabel="WhatsApp borrower"
         >
-          <Ionicons name="logo-whatsapp" size={17} color={dynamicColors.success} />
-          <Text style={[styles.quickActionText, { color: dynamicColors.success }]}>WhatsApp</Text>
+          <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.quickActionBtn, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}
           onPress={handleSms}
+          accessibilityLabel="SMS borrower"
         >
-          <Ionicons name="chatbubble-outline" size={17} color={dynamicColors.ink} />
-          <Text style={[styles.quickActionText, { color: dynamicColors.ink }]}>SMS</Text>
+          <Ionicons name="chatbubble-outline" size={18} color={dynamicColors.ink} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.quickActionBtn, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}
           onPress={() => router.push(`/loans/new?customerId=${customer.id}` as any)}
+          accessibilityLabel="New Loan"
         >
-          <Ionicons name="add-circle" size={17} color={dynamicColors.primaryDark} />
-          <Text style={[styles.quickActionText, { color: dynamicColors.primaryDark }]}>Loan</Text>
+          <Ionicons name="add" size={22} color={dynamicColors.primaryDark} />
         </TouchableOpacity>
       </View>
 
@@ -570,6 +630,25 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: 1,
   },
+  avatarTouchable: {
+    position: 'relative',
+  },
+  avatarCameraBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 3,
+  },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -583,26 +662,23 @@ const styles = StyleSheet.create({
   },
   quickActionsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     marginBottom: 16,
   },
   quickActionBtn: {
     flex: 1,
-    flexDirection: 'row',
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
-    paddingVertical: 10,
-    borderRadius: 999,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 5,
-  },
-  quickActionText: {
-    fontFamily: typography.fontHeadline,
-    fontSize: 12,
-    color: colors.ink,
-    letterSpacing: 1.0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   tilesRow: {
     flexDirection: 'row',

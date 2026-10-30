@@ -62,16 +62,16 @@ export function PillButton({
             borderWidth: 1,
             borderColor: dynamicColors.primaryBorder,
           },
-          text: { color: dynamicColors.primaryDark },
-          spinnerColor: dynamicColors.primaryDark,
-          iconColor: dynamicColors.primaryDark,
+          text: { color: dynamicColors.headingPrimary },
+          spinnerColor: dynamicColors.headingPrimary,
+          iconColor: dynamicColors.headingPrimary,
         };
       case 'outline':
         return {
           container: { backgroundColor: dynamicColors.surface, borderWidth: 1.5, borderColor: dynamicColors.primary },
-          text: { color: dynamicColors.primaryDark },
-          spinnerColor: dynamicColors.primaryDark,
-          iconColor: dynamicColors.primaryDark,
+          text: { color: dynamicColors.headingPrimary },
+          spinnerColor: dynamicColors.headingPrimary,
+          iconColor: dynamicColors.headingPrimary,
         };
       case 'ghost':
         return {

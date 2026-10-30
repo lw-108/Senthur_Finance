@@ -1,0 +1,50 @@
+- generic [ref=e1]:
+  - generic [ref=e68]:
+    - generic [ref=e69]:
+      - button "Go back" [ref=e71] [cursor=pointer]:
+        - generic [ref=e72]: 
+      - generic [ref=e73]: Disburse Loan
+      - button "Admin profile" [ref=e76] [cursor=pointer]:
+        - generic [ref=e77]: GF
+    - generic [ref=e80]:
+      - generic [ref=e81]:
+        - generic [ref=e82]: Step 1 of 5
+        - generic [ref=e83]: Borrower
+      - generic [ref=e84]: "Next: Amount & Rate"
+    - generic [ref=e88]:
+      - generic [ref=e89]:
+        - generic [ref=e90]: Borrower & Purpose
+        - generic [ref=e91]: Choose customer and specify the loan purpose
+      - generic [ref=e92]:
+        - generic [ref=e93]: Select Borrower *
+        - generic [active] [ref=e94] [cursor=pointer]:
+          - generic [ref=e95]: Select option
+          - generic [ref=e96]: 
+      - generic [ref=e97]:
+        - generic [ref=e98]: Loan Product & Scheme *
+        - generic [ref=e99] [cursor=pointer]:
+          - generic [ref=e100]: Select option
+          - generic [ref=e101]: 
+      - generic [ref=e102]:
+        - generic [ref=e103] [cursor=pointer]: Specific Loan Purpose / Description
+        - generic [ref=e105] [cursor=pointer]:
+          - generic [ref=e106]: 
+          - textbox "e.g. Working capital for raw material inventory" [ref=e107]
+    - generic [ref=e110] [cursor=pointer]:
+      - generic [ref=e111]: Amount & Rate
+      - generic [ref=e112]: 
+  - generic [ref=e126] [cursor=pointer]:
+    - button "Fully expand dialog" [ref=e127]:
+      - generic [ref=e129]:
+        - generic [ref=e130]: 
+        - generic [ref=e131]: Pin • Tap to Expand
+        - generic [ref=e132]: 
+    - generic [ref=e133]:
+      - generic [ref=e134]: Select Borrower
+      - generic [ref=e135]: 
+    - generic [ref=e137]:
+      - generic [ref=e138]: 
+      - textbox "Search borrower by name, phone or city..." [ref=e139]
+    - generic [ref=e144]:
+      - generic [ref=e145]: Velavan (9098765434)
+      - generic [ref=e146]: Erode

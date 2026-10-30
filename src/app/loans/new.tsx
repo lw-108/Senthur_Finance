@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, useWindowDimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   Screen,
@@ -29,6 +29,9 @@ import { formatIndianCurrency } from '@/utils/formatters';
 export default function NewLoanScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 375;
+  const isTablet = width >= 768;
   const params = useLocalSearchParams<{ customerId?: string }>();
   const { showSuccess, showError } = useToast();
 
@@ -40,6 +43,16 @@ export default function NewLoanScreen() {
   React.useEffect(() => {
     initializeProducts();
   }, [initializeProducts]);
+
+  React.useEffect(() => {
+    if (params.customerId && customers && customers.length > 0) {
+      const found = customers.find((c) => c.id === params.customerId);
+      if (found) {
+        draft.setField('customerId', found.id);
+        draft.setField('customerName', found.fullName);
+      }
+    }
+  }, [params.customerId, customers]);
 
   const customerOptions = (customers || []).map((c) => ({
     label: `${c.fullName} (${c.phone})`,
@@ -94,6 +107,22 @@ export default function NewLoanScreen() {
   };
 
   const next = () => {
+    if (draft.currentStep === 1) {
+      if (!draft.customerId) {
+        showError('Please select a borrower first');
+        return;
+      }
+      if (!draft.title && !draft.category) {
+        showError('Please select a loan scheme or purpose');
+        return;
+      }
+    }
+    if (draft.currentStep === 2) {
+      if (!draft.principalPaise || draft.principalPaise <= 0) {
+        showError('Please enter a valid loan principal amount');
+        return;
+      }
+    }
     if (draft.currentStep < 5) {
       draft.setStep(draft.currentStep + 1);
     } else {
@@ -111,6 +140,12 @@ export default function NewLoanScreen() {
 
   const handleConfirmDisburse = async () => {
     try {
+      if (!draft.customerId) {
+        showError('Please select a valid borrower before disbursing');
+        draft.setStep(1);
+        return;
+      }
+
       const currentYear = new Date().getFullYear();
       const loanNumber = `LN-${currentYear}-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -168,6 +203,7 @@ export default function NewLoanScreen() {
       });
 
       showSuccess(`Loan ${loanNumber} disbursed to ${draft.customerName}!`);
+      draft.resetDraft();
       router.back();
     } catch (e: any) {
       showError(e?.message || 'Failed to disburse loan');
@@ -202,6 +238,17 @@ export default function NewLoanScreen() {
             ? 'Security'
             : 'Confirm & Disburse'
         }
+        nextStepTitle={
+          draft.currentStep === 1
+            ? 'Amount & Rate'
+            : draft.currentStep === 2
+            ? 'Schedule'
+            : draft.currentStep === 3
+            ? 'Security'
+            : draft.currentStep === 4
+            ? 'Confirm & Disburse'
+            : undefined
+        }
       />
 
       {/* STEP 1: Select Customer & Purpose */}
@@ -217,6 +264,8 @@ export default function NewLoanScreen() {
             selectedValue={draft.customerId}
             onSelect={handleSelectCustomer}
             options={customerOptions}
+            searchable
+            searchPlaceholder="Search borrower by name, phone or city..."
           />
 
           <SelectModal
@@ -380,7 +429,7 @@ export default function NewLoanScreen() {
 
             <View style={styles.summaryItemRow}>
               <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Effective Annual Rate (XIRR):</Text>
-              <Text style={[styles.summaryValue, { color: colors.primaryDark }]}>
+              <Text style={[styles.summaryValue, { color: colors.headingPrimary }]}>
                 {draft.preview.effectiveAnnualRate}% p.a.
               </Text>
             </View>
@@ -513,21 +562,44 @@ export default function NewLoanScreen() {
       )}
 
       {/* Navigation Buttons */}
-      <View style={styles.footerButtons}>
+      <View
+        style={[
+          styles.footerButtons,
+          isTablet && styles.footerButtonsTablet,
+        ]}
+      >
         {draft.currentStep > 1 && (
           <PillButton
             title="Back"
+            iconName="chevron-back"
+            iconPosition="left"
             onPress={prev}
             variant="secondary"
-            style={styles.halfBtn}
+            size={isSmallScreen ? 'sm' : 'md'}
+            style={styles.backBtn}
+            textStyle={isSmallScreen ? styles.btnTextSmall : undefined}
           />
         )}
         <PillButton
-          title={draft.currentStep === 5 ? 'Confirm & Disburse' : 'Continue'}
+          title={
+            draft.currentStep === 1
+              ? 'Amount & Rate'
+              : draft.currentStep === 2
+              ? 'Schedule'
+              : draft.currentStep === 3
+              ? 'Security'
+              : draft.currentStep === 4
+              ? 'Confirm & Disburse'
+              : 'Confirm & Disburse'
+          }
+          iconName={draft.currentStep === 5 ? 'checkmark-circle' : 'arrow-forward'}
+          iconPosition="right"
           onPress={next}
           loading={createLoanMutation.isPending}
           variant="primary"
-          style={draft.currentStep === 1 ? styles.fullBtn : styles.halfBtn}
+          size={isSmallScreen ? 'sm' : 'md'}
+          style={draft.currentStep === 1 ? styles.fullBtn : styles.continueBtn}
+          textStyle={isSmallScreen ? styles.btnTextSmall : undefined}
         />
       </View>
     </Screen>
@@ -583,14 +655,30 @@ const styles = StyleSheet.create({
   },
   footerButtons: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-    marginBottom: 40,
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 24,
+    marginBottom: 44,
+    width: '100%',
   },
-  halfBtn: {
-    flex: 1,
+  footerButtonsTablet: {
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
+  backBtn: {
+    flex: 0.38,
+    minHeight: 46,
+  },
+  continueBtn: {
+    flex: 0.62,
+    minHeight: 46,
   },
   fullBtn: {
     width: '100%',
+    minHeight: 46,
+  },
+  btnTextSmall: {
+    fontSize: 13,
+    letterSpacing: 0.5,
   },
 });

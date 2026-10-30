@@ -1,0 +1,12 @@
+[   20169ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286
+[  160926ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286
+[  206425ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:69286

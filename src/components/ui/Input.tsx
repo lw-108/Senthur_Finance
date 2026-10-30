@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TextInputProps,
   TouchableOpacity,
+  Pressable,
   ViewStyle,
   Platform,
 } from 'react-native';
@@ -14,6 +15,7 @@ import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { radii } from '@/theme/spacing';
 import { useTheme } from '@/store/useThemeStore';
+import { useKeyboardAware } from './Screen';
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -28,22 +30,31 @@ export interface InputProps extends TextInputProps {
   isPassword?: boolean;
 }
 
-export function Input({
-  label,
-  required,
-  error,
-  hint,
-  leadingIcon,
-  trailingIcon,
-  onTrailingIconPress,
-  containerStyle,
-  inputContainerStyle,
-  isPassword = false,
-  style,
-  value,
-  ...rest
-}: InputProps) {
+export const Input = forwardRef<TextInput, InputProps>(function Input(
+  {
+    label,
+    required,
+    error,
+    hint,
+    leadingIcon,
+    trailingIcon,
+    onTrailingIconPress,
+    containerStyle,
+    inputContainerStyle,
+    isPassword = false,
+    style,
+    value,
+    ...rest
+  },
+  forwardedRef
+) {
   const { colors: dynamicColors, isDark } = useTheme();
+  const keyboardAware = useKeyboardAware();
+  const containerRef = useRef<View>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  useImperativeHandle(forwardedRef, () => inputRef.current as TextInput);
+
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -51,18 +62,25 @@ export function Input({
   const isRequired = required || (label ? label.includes('*') : false);
   const cleanLabel = label ? label.replace(/\s*\*+$/, '') : '';
 
+  const handleContainerPress = () => {
+    inputRef.current?.focus();
+  };
+
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View ref={containerRef} style={[styles.container, containerStyle]}>
       {label && (
-        <Text style={[styles.label, { color: dynamicColors.ink }]}>
-          {cleanLabel}
-          {isRequired && (
-            <Text style={{ color: dynamicColors.danger, fontWeight: '700' }}> *</Text>
-          )}
-        </Text>
+        <Pressable onPress={handleContainerPress}>
+          <Text style={[styles.label, { color: dynamicColors.ink }]}>
+            {cleanLabel}
+            {isRequired && (
+              <Text style={{ color: dynamicColors.danger, fontWeight: '700' }}> *</Text>
+            )}
+          </Text>
+        </Pressable>
       )}
 
-      <View
+      <Pressable
+        onPress={handleContainerPress}
         style={[
           styles.inputContainer,
           { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border },
@@ -84,6 +102,7 @@ export function Input({
         )}
 
         <TextInput
+          ref={inputRef}
           style={[
             styles.input,
             {
@@ -94,11 +113,20 @@ export function Input({
           ]}
           selectionColor={dynamicColors.primary}
           placeholderTextColor={dynamicColors.textTertiary}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
           secureTextEntry={isPassword && !showPassword}
           value={value}
           {...rest}
+          onFocus={(e) => {
+            setIsFocused(true);
+            if (Platform.OS !== 'web') {
+              keyboardAware?.scrollToFocusedInput(containerRef.current);
+            }
+            rest.onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setIsFocused(false);
+            rest.onBlur?.(e);
+          }}
         />
 
         {isPassword ? (
@@ -127,7 +155,7 @@ export function Input({
             />
           </TouchableOpacity>
         ) : null}
-      </View>
+      </Pressable>
 
       {error ? (
         <Text style={[styles.errorText, { color: dynamicColors.danger }]}>{error}</Text>
@@ -136,7 +164,7 @@ export function Input({
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

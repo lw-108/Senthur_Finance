@@ -5,11 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { Screen, PillButton, useToast } from '@/components/ui';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
+import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 
 export default function ProofViewerScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ url?: string; title?: string }>();
   const { showSuccess } = useToast();
+  const { business } = useBusinessSettingsStore();
+  const bName = (business.businessName || 'FINANCE LEDGER').toUpperCase();
 
   const docTitle = params.title || 'Proof Document';
 
@@ -45,7 +48,7 @@ export default function ProofViewerScreen() {
             <Ionicons name="document-text" size={72} color={colors.primary} />
             <Text style={styles.docTitle}>{docTitle}</Text>
             <Text style={styles.watermark}>
-              CONFIDENTIAL • FOR SENTHUR FINANCE LOAN ONLY
+              CONFIDENTIAL • FOR {bName} LOAN ONLY
             </Text>
           </View>
         )}

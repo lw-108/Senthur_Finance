@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Screen,
@@ -28,6 +28,9 @@ import { IdProofType } from '@/features/customers/types';
 export default function NewCustomerScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 375;
+  const isTablet = width >= 768;
   const { showSuccess, showError } = useToast();
   const adminUid = useAuthStore((s) => s.adminUid);
   const createCustomerMutation = useCreateCustomer();
@@ -187,6 +190,17 @@ export default function NewCustomerScreen() {
             ? 'Guarantor'
             : 'Review & Save'
         }
+        nextStepTitle={
+          draft.currentStep === 1
+            ? 'Address'
+            : draft.currentStep === 2
+            ? 'KYC Verification'
+            : draft.currentStep === 3
+            ? 'Guarantor'
+            : draft.currentStep === 4
+            ? 'Review & Save'
+            : undefined
+        }
       />
 
       {/* STEP 1: Basic Information */}
@@ -198,8 +212,8 @@ export default function NewCustomerScreen() {
           />
 
           {duplicateWarning && (
-            <View style={styles.warningBox}>
-              <Text style={styles.warningText}>{duplicateWarning}</Text>
+            <View style={[styles.warningBox, { backgroundColor: colors.warningLight }]}>
+              <Text style={[styles.warningText, { color: colors.warning }]}>{duplicateWarning}</Text>
             </View>
           )}
 
@@ -422,7 +436,7 @@ export default function NewCustomerScreen() {
             subtitle="Verify borrower information before creating profile"
           />
 
-          <Card variant="surface" style={styles.reviewCard}>
+          <Card variant="surface" style={[styles.reviewCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
             <View style={styles.reviewHeader}>
               <Avatar name={draft.fullName} size={54} />
               <View style={styles.reviewInfo}>
@@ -461,21 +475,44 @@ export default function NewCustomerScreen() {
       )}
 
       {/* Wizard Navigation Buttons */}
-      <View style={styles.footerButtons}>
+      <View
+        style={[
+          styles.footerButtons,
+          isTablet && styles.footerButtonsTablet,
+        ]}
+      >
         {draft.currentStep > 1 && (
           <PillButton
             title="Back"
+            iconName="chevron-back"
+            iconPosition="left"
             onPress={prevStep}
             variant="secondary"
-            style={styles.halfBtn}
+            size={isSmallScreen ? 'sm' : 'md'}
+            style={styles.backBtn}
+            textStyle={isSmallScreen ? styles.btnTextSmall : undefined}
           />
         )}
         <PillButton
-          title={draft.currentStep === 5 ? 'Save Borrower' : 'Continue'}
+          title={
+            draft.currentStep === 1
+              ? 'Address'
+              : draft.currentStep === 2
+              ? 'KYC Verification'
+              : draft.currentStep === 3
+              ? 'Guarantor'
+              : draft.currentStep === 4
+              ? 'Review & Save'
+              : 'Save Borrower'
+          }
+          iconName={draft.currentStep === 5 ? 'checkmark-circle' : 'arrow-forward'}
+          iconPosition="right"
           onPress={nextStep}
           loading={createCustomerMutation.isPending}
           variant="primary"
-          style={draft.currentStep === 1 ? styles.fullBtn : styles.halfBtn}
+          size={isSmallScreen ? 'sm' : 'md'}
+          style={draft.currentStep === 1 ? styles.fullBtn : styles.continueBtn}
+          textStyle={isSmallScreen ? styles.btnTextSmall : undefined}
         />
       </View>
     </Screen>
@@ -554,14 +591,30 @@ const styles = StyleSheet.create({
   },
   footerButtons: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-    marginBottom: 40,
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 24,
+    marginBottom: 44,
+    width: '100%',
   },
-  halfBtn: {
-    flex: 1,
+  footerButtonsTablet: {
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
+  backBtn: {
+    flex: 0.38,
+    minHeight: 46,
+  },
+  continueBtn: {
+    flex: 0.62,
+    minHeight: 46,
   },
   fullBtn: {
     width: '100%',
+    minHeight: 46,
+  },
+  btnTextSmall: {
+    fontSize: 13,
+    letterSpacing: 0.5,
   },
 });

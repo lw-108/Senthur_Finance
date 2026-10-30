@@ -107,7 +107,7 @@ export default function HomeScreen() {
 
   const handleWhatsApp = (phone?: string, name?: string) => {
     if (phone) {
-      openWhatsApp(phone, `Hello ${name}, friendly payment reminder from Senthur Finance.`);
+      openWhatsApp(phone, `Hello ${name}, friendly payment reminder from ${business.businessName || 'Senthur Finance'}.`);
     } else {
       Alert.alert('Notice', 'No phone number on record for this borrower.');
     }

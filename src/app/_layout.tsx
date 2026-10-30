@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Platform, AppState, AppStateStatus } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -18,12 +18,16 @@ import { SplashScreenView } from '@/components/ui';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useThemeStore, useTheme } from '@/store/useThemeStore';
 import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
+import { InitialSetupModal, isSetupCompleted } from '@/components/onboarding/InitialSetupModal';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export const unstable_settings = {
   initialRouteName: 'auth/login',
 };
+
+// Module-level guard: ensures splash screen only displays once on initial boot, never on app switch
+let hasCompletedInitialSplash = false;
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -38,7 +42,21 @@ export default function RootLayout() {
     SpaceGrotesk_700Bold,
   });
 
-  const [isSplashActive, setIsSplashActive] = useState(true);
+  const [isSplashActive, setIsSplashActive] = useState(() => !hasCompletedInitialSplash);
+  const [showSetupModal, setShowSetupModal] = useState(false);
+
+  useEffect(() => {
+    isSetupCompleted().then((completed) => {
+      if (!completed) {
+        setShowSetupModal(true);
+      }
+    });
+  }, []);
+
+  const handleSplashFinish = () => {
+    hasCompletedInitialSplash = true;
+    setIsSplashActive(false);
+  };
 
   // Connect Google Fonts link for web environments
   useEffect(() => {
@@ -68,13 +86,11 @@ export default function RootLayout() {
   const initializeAuth = useAuthStore((s) => s.initialize);
   const initializeTheme = useThemeStore((s) => s.initializeTheme);
   const initializeBusiness = useBusinessSettingsStore((s) => s.initialize);
-  const { isInitialized, isAuthenticatedSession, hasStoredAccount, requireReauth } = useAuthStore();
+  const { isInitialized, isAuthenticatedSession, hasStoredAccount } = useAuthStore();
   const { colors: dynamicColors, isDark } = useTheme();
 
   const router = useRouter();
   const segments = useSegments();
-  const appStateRef = useRef(AppState.currentState);
-  const backgroundTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     initializeAuth();
@@ -91,41 +107,6 @@ export default function RootLayout() {
       document.body.style.backgroundColor = isDark ? '#272727' : '#F4F4F6';
     }
   }, [isDark]);
-
-  // App lock timeout: only lock if app has been in background/inactive for at least 15 minutes
-  useEffect(() => {
-    const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
-
-    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      const prevAppState = appStateRef.current;
-
-      if (
-        (prevAppState === 'active' || prevAppState === null) &&
-        (nextAppState === 'background' || nextAppState === 'inactive')
-      ) {
-        // Record timestamp when the user leaves the app
-        backgroundTimeRef.current = Date.now();
-      } else if (
-        (prevAppState === 'background' || prevAppState === 'inactive') &&
-        nextAppState === 'active'
-      ) {
-        // Re-entering active state: check elapsed time since leaving
-        if (backgroundTimeRef.current) {
-          const elapsed = Date.now() - backgroundTimeRef.current;
-          if (elapsed >= FIFTEEN_MINUTES_MS) {
-            requireReauth();
-          }
-        }
-        backgroundTimeRef.current = null;
-      }
-
-      appStateRef.current = nextAppState;
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [requireReauth]);
 
   // Enforce Lock screen (password unlock) or Login page whenever session is unauthenticated
   useEffect(() => {
@@ -260,10 +241,17 @@ export default function RootLayout() {
         />
       </Stack>
 
-      {isSplashActive && (
+      {isSplashActive && !hasCompletedInitialSplash && (
         <SplashScreenView
           duration={5500}
-          onFinish={() => setIsSplashActive(false)}
+          onFinish={handleSplashFinish}
+        />
+      )}
+
+      {showSetupModal && !isSplashActive && (
+        <InitialSetupModal
+          visible={showSetupModal && !isSplashActive}
+          onComplete={() => setShowSetupModal(false)}
         />
       )}
     </AppProviders>

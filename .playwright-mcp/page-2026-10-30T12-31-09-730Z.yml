@@ -1,0 +1,29 @@
+- generic [ref=f1e5]:
+  - generic [ref=f1e13]:
+    - generic [ref=f1e14]:
+      - button "Go back" [ref=f1e16] [cursor=pointer]
+      - generic [ref=f1e17]: Disburse Loan
+      - button "Admin profile" [ref=f1e20] [cursor=pointer]:
+        - generic [ref=f1e21]: AD
+    - generic [ref=f1e24]:
+      - generic [ref=f1e25]:
+        - generic [ref=f1e26]: Step 1 of 5
+        - generic [ref=f1e27]: Borrower
+      - generic [ref=f1e28]: "Next: Amount & Rate"
+    - generic [ref=f1e32]:
+      - generic [ref=f1e33]:
+        - generic [ref=f1e34]: Borrower & Purpose
+        - generic [ref=f1e35]: Choose customer and specify the loan purpose
+      - generic [ref=f1e36]:
+        - generic [ref=f1e37]: Select Borrower *
+        - generic [ref=f1e38] [cursor=pointer]: Select option
+      - generic [ref=f1e40]:
+        - generic [ref=f1e41]: Loan Product & Scheme *
+        - generic [ref=f1e42] [cursor=pointer]: Select option
+      - generic [ref=f1e44]:
+        - generic [ref=f1e45] [cursor=pointer]: Specific Loan Purpose / Description
+        - textbox "e.g. Working capital for raw material inventory" [ref=f1e48]
+    - generic [ref=f1e49]: Amount & Rate
+  - generic [ref=f1e55]:
+    - generic [ref=f1e56]: "0"
+    - generic [ref=f1e57]: "%"

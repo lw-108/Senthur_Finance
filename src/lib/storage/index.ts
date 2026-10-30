@@ -1,5 +1,4 @@
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from '@/lib/firebase/config';
+import { SupabaseStorageProvider } from './supabaseStorage';
 
 export interface UploadProgressCallback {
   (progress: number): void;
@@ -25,59 +24,7 @@ export interface StorageProvider {
 }
 
 /**
- * Firebase Storage Implementation
- */
-export class FirebaseStorageProvider implements StorageProvider {
-  async uploadFile(
-    fileUri: string,
-    destinationPath: string,
-    mimeType: string = 'image/jpeg',
-    onProgress?: UploadProgressCallback
-  ): Promise<UploadResult> {
-    const response = await fetch(fileUri);
-    const blob = await response.blob();
-    const storageRef = ref(storage, destinationPath);
-
-    return new Promise((resolve, reject) => {
-      const uploadTask = uploadBytesResumable(storageRef, blob, {
-        contentType: mimeType,
-      });
-
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          onProgress?.(progress);
-        },
-        (error) => {
-          reject(error);
-        },
-        async () => {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve({
-            url: downloadUrl,
-            storagePath: destinationPath,
-            sizeBytes: blob.size,
-            mime: mimeType,
-          });
-        }
-      );
-    });
-  }
-
-  async deleteFile(storagePath: string): Promise<void> {
-    const storageRef = ref(storage, storagePath);
-    await deleteObject(storageRef);
-  }
-
-  async getPublicUrl(storagePath: string): Promise<string> {
-    const storageRef = ref(storage, storagePath);
-    return await getDownloadURL(storageRef);
-  }
-}
-
-/**
- * Cloudinary Storage Implementation
+ * Cloudinary Storage Implementation (Optional alternative)
  */
 export class CloudinaryStorageProvider implements StorageProvider {
   private cloudName: string;
@@ -129,8 +76,7 @@ export class CloudinaryStorageProvider implements StorageProvider {
   }
 
   async deleteFile(storagePath: string): Promise<void> {
-    // Cloudinary client side deletion requires signature or signed backend endpoint
-    console.warn('Cloudinary deleteFile should be performed via backend / Cloud Functions');
+    console.warn('Cloudinary deleteFile should be performed via backend API');
   }
 
   async getPublicUrl(storagePath: string): Promise<string> {
@@ -138,13 +84,14 @@ export class CloudinaryStorageProvider implements StorageProvider {
   }
 }
 
-// Factory to get configured StorageProvider
+// Factory to get configured StorageProvider (Supabase is standard default)
 export function getStorageProvider(): StorageProvider {
-  const providerType = process.env.EXPO_PUBLIC_STORAGE_PROVIDER || 'firebase';
-  if (providerType.toLowerCase() === 'cloudinary') {
+  const providerType = (process.env.EXPO_PUBLIC_STORAGE_PROVIDER || 'supabase').toLowerCase();
+  if (providerType === 'cloudinary') {
     return new CloudinaryStorageProvider();
   }
-  return new FirebaseStorageProvider();
+  return new SupabaseStorageProvider();
 }
 
 export const defaultStorage = getStorageProvider();
+export { SupabaseStorageProvider };

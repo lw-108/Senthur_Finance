@@ -1,0 +1,40 @@
+- generic [ref=f1e84]:
+  - generic [ref=f1e85]:
+    - button "Go back" [ref=f1e87] [cursor=pointer]:
+      - generic [ref=f1e88]: 
+    - generic [ref=f1e89]: New Borrower
+    - button "Admin profile" [ref=f1e92] [cursor=pointer]:
+      - generic [ref=f1e93]: SB
+  - generic [ref=f1e96]:
+    - generic [ref=f1e97]:
+      - generic [ref=f1e98]: Step 2 of 5
+      - generic [ref=f1e99]: Address
+    - generic [ref=f1e100]: "Next: KYC Verification"
+  - generic [ref=f1e148]:
+    - generic [ref=f1e149]:
+      - generic [ref=f1e150]: Residential Address
+      - generic [ref=f1e151]: Permanent place of stay and operation
+    - generic [ref=f1e152]:
+      - generic [ref=f1e153] [cursor=pointer]: Address Line 1 (Door / Building / Street) *
+      - generic [ref=f1e155] [cursor=pointer]:
+        - generic [ref=f1e156]: 
+        - textbox "Enter street name, building or door no." [active] [ref=f1e157]: 42 Main Bazaar St
+    - generic [ref=f1e158]:
+      - generic [ref=f1e159] [cursor=pointer]: City / Town *
+      - generic [ref=f1e161] [cursor=pointer]:
+        - generic [ref=f1e162]: 
+        - textbox "Enter city or town" [ref=f1e163]
+    - generic [ref=f1e164]:
+      - generic [ref=f1e166]:
+        - generic [ref=f1e167] [cursor=pointer]: State
+        - textbox [ref=f1e170]: Tamil Nadu
+      - generic [ref=f1e172]:
+        - generic [ref=f1e173] [cursor=pointer]: Pincode *
+        - textbox "641012" [ref=f1e176]
+  - generic [ref=f1e143]:
+    - generic [ref=f1e178] [cursor=pointer]:
+      - generic [ref=f1e179]: 
+      - generic [ref=f1e180]: Back
+    - generic [ref=f1e145] [cursor=pointer]:
+      - generic [ref=f1e146]: "Next: KYC Verification"
+      - generic [ref=f1e147]: 
