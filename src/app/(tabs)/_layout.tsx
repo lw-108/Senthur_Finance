@@ -131,7 +131,6 @@ export default function TabsLayout() {
                 accessibilityLabel="Create New Loan"
                 style={[
                   styles.centerFab,
-                  shadows.floating,
                   {
                     width: fabSize,
                     height: fabSize,

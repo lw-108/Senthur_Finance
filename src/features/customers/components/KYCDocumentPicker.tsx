@@ -16,7 +16,6 @@ import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { radii } from '@/theme/spacing';
 import { useTheme } from '@/store/useThemeStore';
-import { defaultStorage } from '@/lib/storage';
 
 interface KYCDocumentPickerProps {
   label: string;
@@ -35,7 +34,7 @@ export function KYCDocumentPicker({
   onChangeBack,
   hasBackSide = true,
 }: KYCDocumentPickerProps) {
-  const { colors: dynamicColors, isDark } = useTheme();
+  const { colors: dynamicColors } = useTheme();
   const [loadingSide, setLoadingSide] = useState<'front' | 'back' | null>(null);
 
   const compressImage = async (uri: string): Promise<string> => {
@@ -65,13 +64,13 @@ export function KYCDocumentPicker({
         }
         result = await ImagePicker.launchCameraAsync({
           quality: 0.8,
-          allowsEditing: true,
+          allowsEditing: false,
         });
       } else {
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           quality: 0.8,
-          allowsEditing: true,
+          allowsEditing: false,
         });
       }
 

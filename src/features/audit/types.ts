@@ -17,4 +17,6 @@ export interface AuditLogFilter {
   entityType?: string;
   startDate?: string;
   endDate?: string;
+  customerId?: string;
+  loanId?: string;
 }

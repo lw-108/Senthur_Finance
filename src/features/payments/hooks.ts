@@ -4,6 +4,7 @@ import { fetchPayments, recordPaymentTransaction } from './api';
 import { RecordPaymentInput } from './types';
 import { LOANS_QUERY_KEY, LOAN_SCHEDULE_QUERY_KEY } from '@/features/loans/hooks';
 import { CUSTOMERS_QUERY_KEY } from '@/features/customers/hooks';
+import { AUDIT_LOGS_QUERY_KEY } from '@/features/audit/hooks';
 
 export const PAYMENTS_QUERY_KEY = 'payments';
 
@@ -25,8 +26,9 @@ export function useRecordPayment() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: [PAYMENTS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: [LOANS_QUERY_KEY] });
-      queryClient.invalidateQueries({ queryKey: [LOAN_SCHEDULE_QUERY_KEY, adminUid, vars.loanId] });
+      queryClient.invalidateQueries({ queryKey: [LOAN_SCHEDULE_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: [CUSTOMERS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [AUDIT_LOGS_QUERY_KEY] });
     },
   });
 }

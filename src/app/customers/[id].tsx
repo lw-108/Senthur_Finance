@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Modal, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,7 +7,6 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import {
   Screen,
   Header,
-  DisplayTitle,
   Tile,
   Card,
   PillButton,
@@ -28,6 +27,9 @@ import { useTheme } from '@/store/useThemeStore';
 import { useCustomer, useDeleteCustomer, useUpdateCustomer } from '@/features/customers/hooks';
 import { useLoans } from '@/features/loans/hooks';
 import { usePayments } from '@/features/payments/hooks';
+import { Payment } from '@/features/payments/types';
+import { PaymentReceiptModal } from '@/features/payments/components/PaymentReceiptModal';
+import { BorrowerActivityList } from '@/features/customers/components/BorrowerActivityList';
 import { formatIndianCurrency, maskIdentifier, formatDate } from '@/utils/formatters';
 import { openWhatsApp } from '@/utils/whatsapp';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -52,9 +54,50 @@ export default function CustomerDetailScreen() {
   const { products: loanProducts, initialize: initializeProducts } = useLoanProductsStore();
   const { business } = useBusinessSettingsStore();
 
-  const [activeTab, setActiveTab] = useState<'loans' | 'payments' | 'docs' | 'guarantor'>('loans');
+  const [activeTab, setActiveTab] = useState<'loans' | 'payments' | 'activity' | 'docs' | 'guarantor'>('loans');
   const [unmaskedId, setUnmaskedId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  // Receipt Modal State for viewing/sharing/printing repayments
+  const [selectedReceiptPayment, setSelectedReceiptPayment] = useState<Payment | null>(null);
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+
+  // Derive live, dynamic totals from customerLoans and customerPayments for 100% real-time accuracy
+  const computedTotals = React.useMemo(() => {
+    if (!customerLoans || customerLoans.length === 0) {
+      return (
+        customer?.totals || {
+          totalLent: 0,
+          totalOutstanding: 0,
+          totalPaid: 0,
+          overdueAmount: 0,
+          activeLoans: 0,
+        }
+      );
+    }
+    const totalLent = customerLoans.reduce((sum, l) => sum + (l.principal || 0), 0);
+    const totalOutstanding = customerLoans
+      .filter((l) => l.status !== 'CLOSED' && !l.isDeleted)
+      .reduce((sum, l) => sum + (l.outstandingPrincipal || 0), 0);
+    const totalPaid =
+      customerPayments.length > 0
+        ? customerPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+        : customerLoans.reduce((sum, l) => sum + (l.totalPaid || 0), 0);
+    const overdueAmount = customerLoans
+      .filter((l) => (l.status === 'OVERDUE' || (l.daysOverdue && l.daysOverdue > 0)) && !l.isDeleted)
+      .reduce((sum, l) => sum + (l.outstandingPrincipal || 0), 0);
+    const activeLoans = customerLoans.filter(
+      (l) => (l.status === 'ACTIVE' || l.status === 'OVERDUE') && !l.isDeleted
+    ).length;
+
+    return {
+      totalLent,
+      totalOutstanding,
+      totalPaid,
+      overdueAmount,
+      activeLoans,
+    };
+  }, [customerLoans, customerPayments, customer?.totals]);
 
   // Edit Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -68,7 +111,7 @@ export default function CustomerDetailScreen() {
     initializeProducts();
   }, [initializeProducts]);
 
-  useEffect(() => {
+  const handleOpenEditModal = () => {
     if (customer) {
       setEditName(customer.fullName);
       setEditPhone(customer.phone);
@@ -76,7 +119,8 @@ export default function CustomerDetailScreen() {
       setEditCity(customer.address.city || '');
       setEditScheme(customer.tags?.[0] || 'Gold Loan (Jewel Loan)');
     }
-  }, [customer]);
+    setEditModalOpen(true);
+  };
 
   const loanSchemeOptions = loanProducts.map((p) => ({
     label: p.name,
@@ -168,35 +212,53 @@ export default function CustomerDetailScreen() {
     }
   };
 
-  const handlePickPhoto = async () => {
+  // Borrower Photo Picker with Direct Selection (No Cropping to prevent Android activity locks)
+  const pickPhotoFromSource = async (source: 'camera' | 'library') => {
     if (!customer) return;
     try {
-      const res = await ImagePicker.launchImageLibraryAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.7,
-        base64: true,
-      });
+      let res: ImagePicker.ImagePickerResult;
+
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          showError('Camera permission is required to capture borrower photo');
+          return;
+        }
+        res = await ImagePicker.launchCameraAsync({
+          allowsEditing: false,
+          quality: 0.8,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          showError('Photo library permission is required to select borrower photo');
+          return;
+        }
+        res = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: false,
+          quality: 0.8,
+        });
+      }
 
       if (!res.canceled && res.assets && res.assets.length > 0) {
         const asset = res.assets[0];
         let avatarUri = asset.uri;
 
-        if (asset.base64) {
-          avatarUri = asset.base64.startsWith('data:')
-            ? asset.base64
-            : `data:image/jpeg;base64,${asset.base64}`;
-        } else {
-          try {
-            const manip = await ImageManipulator.manipulateAsync(
-              asset.uri,
-              [{ resize: { width: 300, height: 300 } }],
-              { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-            );
-            if (manip.base64) {
-              avatarUri = `data:image/jpeg;base64,${manip.base64}`;
-            }
-          } catch {}
+        // Resize and optimize down to a clean 300x300 JPEG (~20KB) to ensure reliable database sync
+        try {
+          const manip = await ImageManipulator.manipulateAsync(
+            asset.uri,
+            [{ resize: { width: 300, height: 300 } }],
+            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+          if (manip.base64) {
+            avatarUri = `data:image/jpeg;base64,${manip.base64}`;
+          } else if (manip.uri) {
+            avatarUri = manip.uri;
+          }
+        } catch (manipErr) {
+          console.warn('[Customer Photo] Optimization notice:', manipErr);
         }
 
         await updateMutation.mutateAsync({
@@ -206,9 +268,28 @@ export default function CustomerDetailScreen() {
         showSuccess('Borrower photo updated');
         refetch();
       }
-    } catch {
+    } catch (err) {
+      console.error('[Customer Photo] Update error:', err);
       showError('Failed to update borrower photo');
     }
+  };
+
+  const handlePickPhoto = () => {
+    if (Platform.OS === 'web') {
+      pickPhotoFromSource('library');
+      return;
+    }
+
+    Alert.alert(
+      'Borrower Photo',
+      'Select an option to update photo:',
+      [
+        { text: 'Take Photo', onPress: () => pickPhotoFromSource('camera') },
+        { text: 'Choose from Gallery', onPress: () => pickPhotoFromSource('library') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleCall = () => {
@@ -242,14 +323,6 @@ export default function CustomerDetailScreen() {
     showSuccess(`Customer marked as ${nextStatus}`);
   };
 
-  const totals = customer.totals || {
-    totalLent: 0,
-    totalOutstanding: 0,
-    totalPaid: 0,
-    overdueAmount: 0,
-    activeLoans: 0,
-  };
-
   return (
     <Screen scrollable>
       <Header
@@ -265,7 +338,7 @@ export default function CustomerDetailScreen() {
               <Ionicons name="document-text-outline" size={22} color={dynamicColors.primaryDark} />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => setEditModalOpen(true)}
+              onPress={handleOpenEditModal}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons name="create-outline" size={22} color={dynamicColors.ink} />
@@ -308,16 +381,16 @@ export default function CustomerDetailScreen() {
           <View style={styles.badgeRow}>
             <Badge
               status={customer.status === 'Blacklisted' ? 'OVERDUE' : 'ACTIVE'}
-              label={customer.status}
+              label={customer.status === 'Blacklisted' ? 'Blocked' : customer.status}
             />
             <Text style={[styles.scoreText, { color: dynamicColors.textSecondary }]}>
-              Internal Score: {customer.creditScoreInternal || 75}/100
+              Rating: {customer.creditScoreInternal || 75}/100
             </Text>
           </View>
         </View>
       </View>
 
-      {/* Quick Action Buttons: Pill icons alone without text */}
+      {/* Quick Action Buttons */}
       <View style={styles.quickActionsRow}>
         <TouchableOpacity
           style={[styles.quickActionBtn, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}
@@ -341,6 +414,16 @@ export default function CustomerDetailScreen() {
           <Ionicons name="chatbubble-outline" size={18} color={dynamicColors.ink} />
         </TouchableOpacity>
         <TouchableOpacity
+          style={[
+            styles.quickActionBtn,
+            { backgroundColor: dynamicColors.successLight, borderColor: dynamicColors.success },
+          ]}
+          onPress={() => router.push(`/payments/new?customerId=${customer.id}` as any)}
+          accessibilityLabel="Collect Loan Due"
+        >
+          <Ionicons name="cash" size={20} color={dynamicColors.success} />
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.quickActionBtn, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}
           onPress={() => router.push(`/loans/new?customerId=${customer.id}` as any)}
           accessibilityLabel="New Loan"
@@ -352,33 +435,64 @@ export default function CustomerDetailScreen() {
       {/* Financial Summary Tiles */}
       <View style={styles.tilesRow}>
         <Tile
-          label="Total Lent"
-          value={formatIndianCurrency(totals.totalLent, { isMinorUnit: true }).formatted}
+          label="Loan Given"
+          value={formatIndianCurrency(computedTotals.totalLent, { isMinorUnit: true }).formatted}
           iconName="cash-outline"
         />
         <Tile
-          label="Outstanding"
-          value={formatIndianCurrency(totals.totalOutstanding, { isMinorUnit: true }).formatted}
+          label="Balance to Pay"
+          value={formatIndianCurrency(computedTotals.totalOutstanding, { isMinorUnit: true }).formatted}
           iconName="wallet-outline"
           iconColor={dynamicColors.primaryDark}
           iconBgColor={dynamicColors.primarySoft}
         />
         <Tile
-          label="Total Paid"
-          value={formatIndianCurrency(totals.totalPaid, { isMinorUnit: true }).formatted}
+          label="Amount Paid"
+          value={formatIndianCurrency(computedTotals.totalPaid, { isMinorUnit: true }).formatted}
           iconName="checkmark-circle-outline"
           iconColor={dynamicColors.success}
           iconBgColor={dynamicColors.successLight}
         />
       </View>
 
+      {/* Active Due Repayment Banner */}
+      {computedTotals.totalOutstanding > 0 && (
+        <TouchableOpacity
+          style={[
+            styles.collectDueBanner,
+            { backgroundColor: dynamicColors.boxBackground, borderColor: dynamicColors.boxBorder },
+          ]}
+          activeOpacity={0.85}
+          onPress={() => router.push(`/payments/new?customerId=${customer.id}` as any)}
+        >
+          <View style={styles.bannerLeft}>
+            <View style={[styles.bannerIconWrap, { backgroundColor: dynamicColors.successLight }]}>
+              <Ionicons name="cash" size={20} color={dynamicColors.success} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerDueTitle, { color: dynamicColors.ink }]}>
+                Collect Due Amount
+              </Text>
+              <Text style={[styles.bannerDueSub, { color: dynamicColors.textSecondary }]}>
+                {formatIndianCurrency(computedTotals.totalOutstanding, { isMinorUnit: true }).formatted} pending • Tap to collect payment & bill
+              </Text>
+            </View>
+          </View>
+          <View style={[styles.bannerDueBadge, { backgroundColor: dynamicColors.primary }]}>
+            <Text style={styles.bannerDueBadgeText}>Pay Due</Text>
+            <Ionicons name="arrow-forward" size={13} color="#FFFFFF" />
+          </View>
+        </TouchableOpacity>
+      )}
+
       {/* Detail Tabs */}
       <SegmentedControl
         items={[
           { label: 'Loans', value: 'loans' },
           { label: 'Payments', value: 'payments' },
-          { label: 'KYC & Proofs', value: 'docs' },
-          { label: 'Guarantor', value: 'guarantor' },
+          { label: 'Activity', value: 'activity' },
+          { label: 'ID Proofs', value: 'docs' },
+          { label: 'Surety', value: 'guarantor' },
         ]}
         selectedValue={activeTab}
         onSelect={(val) => setActiveTab(val as any)}
@@ -390,19 +504,32 @@ export default function CustomerDetailScreen() {
           {customerLoans && customerLoans.length > 0 ? (
             <Card variant="surface" style={styles.cardBox}>
               {customerLoans.map((l) => (
-                <ListRow
-                  key={l.id}
-                  title={`${l.title} (${l.loanNumber})`}
-                  subtitle={`Principal: ${formatIndianCurrency(l.principal, { isMinorUnit: true }).formatted} • ${l.interestRate}% ${l.ratePeriod === 'PER_MONTH' ? 'p.m.' : 'p.a.'}`}
-                  metaText={`${l.repaymentFrequency} • Disbursed ${formatDate(l.disbursedOn)}`}
-                  iconName={l.category.includes('Vehicle') ? 'car-outline' : l.category.includes('Gold') ? 'diamond-outline' : 'cash-outline'}
-                  iconColor={colors.primaryDark}
-                  iconBgColor={colors.primarySoft}
-                  rightAmount={formatIndianCurrency(l.outstandingPrincipal, { isMinorUnit: true }).formatted}
-                  rightSubtext="Balance"
-                  showChevron
-                  onPress={() => router.push(`/loans/${l.id}` as any)}
-                />
+                <View key={l.id} style={styles.loanRowWrap}>
+                  <ListRow
+                    title={`${l.title} (${l.loanNumber})`}
+                    subtitle={`Principal: ${formatIndianCurrency(l.principal, { isMinorUnit: true }).formatted} • ${l.interestRate}% ${l.ratePeriod === 'PER_MONTH' ? 'p.m.' : 'p.a.'}`}
+                    metaText={`${l.repaymentFrequency} • Given ${formatDate(l.disbursedOn)}`}
+                    iconName={l.category.includes('Vehicle') ? 'car-outline' : l.category.includes('Gold') ? 'diamond-outline' : 'cash-outline'}
+                    iconColor={colors.primaryDark}
+                    iconBgColor={colors.primarySoft}
+                    rightAmount={formatIndianCurrency(l.outstandingPrincipal, { isMinorUnit: true }).formatted}
+                    rightSubtext="Balance"
+                    showChevron
+                    onPress={() => router.push(`/loans/${l.id}` as any)}
+                  />
+                  {l.status !== 'CLOSED' && l.outstandingPrincipal > 0 && (
+                    <TouchableOpacity
+                      style={[styles.rowPayDueBtn, { backgroundColor: dynamicColors.surfaceMuted, borderColor: dynamicColors.border }]}
+                      onPress={() => router.push(`/payments/new?customerId=${customer.id}&loanId=${l.id}` as any)}
+                    >
+                      <Ionicons name="cash-outline" size={14} color={dynamicColors.success} />
+                      <Text style={[styles.rowPayDueBtnText, { color: dynamicColors.headingPrimary }]}>
+                        Collect Due (EMI: {formatIndianCurrency(l.installmentAmount, { isMinorUnit: true }).formatted})
+                      </Text>
+                      <Ionicons name="chevron-forward" size={13} color={dynamicColors.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                </View>
               ))}
             </Card>
           ) : (
@@ -415,7 +542,7 @@ export default function CustomerDetailScreen() {
             </Card>
           )}
           <PillButton
-            title="+ Disburse New Loan"
+            title="+ Give New Loan"
             onPress={() => router.push(`/loans/new?customerId=${customer.id}` as any)}
             variant="primary"
             fullWidth
@@ -427,6 +554,17 @@ export default function CustomerDetailScreen() {
       {/* Tab 2: Payments */}
       {activeTab === 'payments' && (
         <View style={styles.tabContent}>
+          {computedTotals.totalOutstanding > 0 && (
+            <PillButton
+              title="+ Record Due Payment"
+              iconName="cash-outline"
+              iconPosition="left"
+              onPress={() => router.push(`/payments/new?customerId=${customer.id}` as any)}
+              variant="primary"
+              fullWidth
+              style={{ marginBottom: 12 }}
+            />
+          )}
           {customerPayments.length > 0 ? (
             <Card variant="surface" style={styles.cardBox}>
               {customerPayments.map((p) => (
@@ -437,6 +575,11 @@ export default function CustomerDetailScreen() {
                   rightAmount={`+${formatIndianCurrency(p.amount, { isMinorUnit: true }).formatted}`}
                   rightAmountType="positive"
                   rightSubtext={p.type}
+                  showChevron
+                  onPress={() => {
+                    setSelectedReceiptPayment(p);
+                    setReceiptModalOpen(true);
+                  }}
                 />
               ))}
             </Card>
@@ -446,13 +589,31 @@ export default function CustomerDetailScreen() {
                 iconName="receipt-outline"
                 title="No Payment Records"
                 description="No repayment transactions have been logged for this customer."
+                actionTitle="+ Record First Payment"
+                onAction={() => router.push(`/payments/new?customerId=${customer.id}` as any)}
               />
             </Card>
           )}
         </View>
       )}
 
-      {/* Tab 3: KYC & Proofs with Biometric Reveal */}
+      {/* Tab 3: Recent Activity & Real Database Audit Trail */}
+      {activeTab === 'activity' && (
+        <View style={styles.tabContent}>
+          <BorrowerActivityList
+            customerId={customer.id}
+            customerName={customer.fullName}
+            customerLoans={customerLoans || []}
+            allPayments={customerPayments || []}
+            onViewReceipt={(payment) => {
+              setSelectedReceiptPayment(payment);
+              setReceiptModalOpen(true);
+            }}
+          />
+        </View>
+      )}
+
+      {/* Tab 4: KYC & Proofs with Biometric Reveal */}
       {activeTab === 'docs' && (
         <View style={styles.tabContent}>
           <Card variant="surface" style={styles.cardBox}>
@@ -599,6 +760,15 @@ export default function CustomerDetailScreen() {
         confirmLabel="Archive"
         onConfirm={handleArchive}
         onCancel={() => setDeleteConfirmOpen(false)}
+      />
+
+      {/* Interactive Payment Receipt Modal */}
+      <PaymentReceiptModal
+        visible={receiptModalOpen}
+        onClose={() => setReceiptModalOpen(false)}
+        payment={selectedReceiptPayment}
+        loan={customerLoans?.find((l) => l.id === selectedReceiptPayment?.loanId)}
+        customerPhone={customer.phone}
       />
     </Screen>
   );
@@ -779,5 +949,69 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontHeadline,
     color: colors.ink,
     fontSize: 18,
+  },
+  collectDueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  bannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    marginRight: 8,
+  },
+  bannerIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerDueTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bannerDueSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  bannerDueBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  bannerDueBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  loanRowWrap: {
+    marginBottom: 6,
+  },
+  rowPayDueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    marginHorizontal: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+  },
+  rowPayDueBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
+    marginLeft: 6,
   },
 });

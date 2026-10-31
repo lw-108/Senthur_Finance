@@ -193,12 +193,12 @@ export default function CustomersScreen() {
           <View style={[styles.kpiDivider, { backgroundColor: dynamicColors.border }]} />
 
           <View style={styles.kpiMetric}>
-            <Text style={[styles.kpiLabel, { color: dynamicColors.textSecondary }]}>Portfolio Balance</Text>
+            <Text style={[styles.kpiLabel, { color: dynamicColors.textSecondary }]}>Balance to Collect</Text>
             <Text style={[styles.kpiValue, { color: dynamicColors.headingPrimary }]}>
               {aggregates.totalOutstandingFormatted}
             </Text>
             <Text style={[styles.kpiSub, { color: dynamicColors.textTertiary }]}>
-              Outstanding
+              Total Pending
             </Text>
           </View>
 
@@ -249,8 +249,8 @@ export default function CustomersScreen() {
               <Text style={[styles.sortPillText, { color: dynamicColors.ink }]}>
                 {sortBy === 'name' && 'A → Z'}
                 {sortBy === 'outstanding' && 'Highest Balance'}
-                {sortBy === 'overdue' && 'Most Overdue'}
-                {sortBy === 'score' && 'Credit Score'}
+                {sortBy === 'overdue' && 'Most Late'}
+                {sortBy === 'score' && 'Best Rating'}
               </Text>
             </TouchableOpacity>
           </View>

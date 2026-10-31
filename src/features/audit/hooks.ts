@@ -41,3 +41,31 @@ export function useRecordAuditLog() {
     },
   });
 }
+
+export function useCustomerAuditLogs(customerId: string | undefined, customerLoanIds: string[] = []) {
+  const adminUid = useAuthStore((s) => s.adminUid);
+
+  return useQuery({
+    queryKey: [AUDIT_LOGS_QUERY_KEY, adminUid, 'customer', customerId, customerLoanIds.join(',')],
+    queryFn: async () => {
+      if (!customerId) return [];
+      const allLogs = await fetchAuditLogsFromDb(adminUid);
+      return allLogs.filter((l) => {
+        const matchesCustomer =
+          l.entityId === customerId ||
+          l.metadata?.customerId === customerId ||
+          l.before?.customerId === customerId ||
+          l.after?.customerId === customerId;
+
+        const matchesLoan =
+          (customerLoanIds.length > 0 && customerLoanIds.includes(l.entityId)) ||
+          (l.metadata?.loanId && customerLoanIds.includes(l.metadata.loanId)) ||
+          (l.before?.loanId && customerLoanIds.includes(l.before.loanId)) ||
+          (l.after?.loanId && customerLoanIds.includes(l.after.loanId));
+
+        return matchesCustomer || matchesLoan;
+      });
+    },
+    enabled: Boolean(customerId),
+  });
+}

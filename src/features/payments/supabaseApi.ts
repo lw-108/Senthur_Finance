@@ -1,8 +1,8 @@
 import { supabase, isSupabaseConfigured, isValidUUID } from '@/lib/supabase/client';
 import { getActiveOrganizationId } from '@/lib/supabase/activeOrg';
 import { Payment, RecordPaymentInput } from './types';
-import { fetchLoanById, updateLoan } from '@/features/loans/supabaseApi';
-import { fetchCustomerById, updateCustomer } from '@/features/customers/supabaseApi';
+import { fetchLoanById, updateLoan, fetchLoans } from '@/features/loans/supabaseApi';
+import { updateCustomer } from '@/features/customers/supabaseApi';
 import { allocatePaymentWaterfall } from '@/lib/finance/waterfall';
 import { recordAuditLog } from '@/features/audit/supabaseApi';
 
@@ -195,39 +195,85 @@ export async function recordPaymentTransaction(
         closedOn: isFullyClosed ? (input.paidOn || now).split('T')[0] : loan.closedOn,
       });
 
-      // Update customer totals
+      // Update customer totals accurately based on all loans
       try {
-        const customer = await fetchCustomerById(adminUid, loan.customerId);
-        if (customer) {
-          await updateCustomer(adminUid, customer.id, {
-            totals: {
-              ...customer.totals,
-              totalOutstanding: Math.max(0, customer.totals.totalOutstanding - allocation.allocatedPrincipal),
-              totalPaid: customer.totals.totalPaid + input.amountPaise,
-              overdueAmount: Math.max(0, customer.totals.overdueAmount - input.amountPaise),
-            },
-          });
-        }
-      } catch {}
+        const customerLoans = await fetchLoans(adminUid, { customerId: loan.customerId });
+        const totalOutstanding = customerLoans
+          .filter((l) => l.status !== 'CLOSED' && !l.isDeleted)
+          .reduce((sum, l) => sum + l.outstandingPrincipal, 0);
+        const totalPaid = customerLoans
+          .filter((l) => !l.isDeleted)
+          .reduce((sum, l) => sum + l.totalPaid, 0);
+        const activeLoans = customerLoans
+          .filter((l) => (l.status === 'ACTIVE' || l.status === 'OVERDUE') && !l.isDeleted).length;
+        const overdueAmount = customerLoans
+          .filter((l) => (l.status === 'OVERDUE' || (l.daysOverdue && l.daysOverdue > 0)) && !l.isDeleted)
+          .reduce((sum, l) => sum + l.outstandingPrincipal, 0);
+        const totalLent = customerLoans
+          .filter((l) => !l.isDeleted)
+          .reduce((sum, l) => sum + l.principal, 0);
 
-      // Record audit event
+        await updateCustomer(adminUid, loan.customerId, {
+          totals: {
+            totalLent,
+            totalOutstanding,
+            totalPaid,
+            activeLoans,
+            overdueAmount,
+          },
+        });
+      } catch (err) {
+        console.warn('[Payments Supabase] Failed to update customer totals:', err);
+      }
+
+      // Record audit event with comprehensive checklist and accurate loan reduction details
       await recordAuditLog({
         organizationId: orgId,
         actorUserId: isValidUUID(userId) ? userId : undefined,
         action: isFullyClosed ? 'SETTLEMENT' : 'PAYMENT',
         entityType: 'PAYMENT',
         entityId: isValidUUID(domainPayment.id) ? domainPayment.id : undefined,
-        summary: `Collected repayment of ₹${(input.amountPaise / 100).toLocaleString('en-IN')} (${input.mode}) for ${loan.loanNumber} from ${loan.customerName}`,
+        summary: `Admin collected due of ₹${(input.amountPaise / 100).toLocaleString('en-IN')} (${input.mode}) for ${loan.loanNumber} from ${loan.customerName}`,
         before: {
+          customerId: loan.customerId,
+          customerName: loan.customerName,
+          loanId: loan.id,
+          loanNumber: loan.loanNumber,
           outstandingPrincipalPaise: loan.outstandingPrincipal,
           penaltyAccruedPaise: loan.penaltyAccrued,
         },
         after: {
           receiptNumber,
-          amountPaise: input.amountPaise,
+          dueAmountReceivedPaise: input.amountPaise,
+          principalReducedPaise: allocation.allocatedPrincipal,
+          interestClearedPaise: allocation.allocatedInterest,
+          penaltyClearedPaise: allocation.allocatedPenalty,
+          newOutstandingPaise: newOutstanding,
           paymentMode: input.mode,
           paidOn: input.paidOn || now,
-          newOutstandingPaise: newOutstanding,
+          referenceNo: input.referenceNo,
+          notes: input.notes,
+        },
+        metadata: {
+          customerId: loan.customerId,
+          customerName: loan.customerName,
+          loanId: loan.id,
+          loanNumber: loan.loanNumber,
+          receiptNumber,
+          mode: input.mode,
+          isFullyClosed,
+          checklist: {
+            dueAmountReceived: true,
+            receivedAmountPaise: input.amountPaise,
+            principalReducedPaise: allocation.allocatedPrincipal,
+            interestAllocatedPaise: allocation.allocatedInterest,
+            penaltyAllocatedPaise: allocation.allocatedPenalty,
+            loanBalanceReducedAccurately: true,
+            previousBalancePaise: loan.outstandingPrincipal,
+            updatedRemainingBalancePaise: newOutstanding,
+            receiptNumber,
+            adminConfirmed: true,
+          },
         },
       });
 
@@ -254,6 +300,35 @@ export async function recordPaymentTransaction(
     status: isFullyClosed ? 'CLOSED' : loan.status,
   });
 
+  // Update customer totals in offline fallback
+  try {
+    const customerLoans = await fetchLoans(adminUid, { customerId: loan.customerId });
+    const totalOutstanding = customerLoans
+      .filter((l) => l.status !== 'CLOSED' && !l.isDeleted)
+      .reduce((sum, l) => sum + l.outstandingPrincipal, 0);
+    const totalPaid = customerLoans
+      .filter((l) => !l.isDeleted)
+      .reduce((sum, l) => sum + l.totalPaid, 0);
+    const activeLoans = customerLoans
+      .filter((l) => (l.status === 'ACTIVE' || l.status === 'OVERDUE') && !l.isDeleted).length;
+    const overdueAmount = customerLoans
+      .filter((l) => (l.status === 'OVERDUE' || (l.daysOverdue && l.daysOverdue > 0)) && !l.isDeleted)
+      .reduce((sum, l) => sum + l.outstandingPrincipal, 0);
+    const totalLent = customerLoans
+      .filter((l) => !l.isDeleted)
+      .reduce((sum, l) => sum + l.principal, 0);
+
+    await updateCustomer(adminUid, loan.customerId, {
+      totals: {
+        totalLent,
+        totalOutstanding,
+        totalPaid,
+        activeLoans,
+        overdueAmount,
+      },
+    });
+  } catch {}
+
   domainPayment = {
     id: paymentId,
     loanId: loan.id,
@@ -278,6 +353,54 @@ export async function recordPaymentTransaction(
     createdBy: userId || 'local_user',
     isDeleted: false,
   };
+
+  await recordAuditLog({
+    action: isFullyClosed ? 'SETTLEMENT' : 'PAYMENT',
+    entityType: 'PAYMENT',
+    entityId: domainPayment.id,
+    summary: `Admin collected due of ₹${(input.amountPaise / 100).toLocaleString('en-IN')} (${input.mode}) for ${loan.loanNumber} from ${loan.customerName}`,
+    before: {
+      customerId: loan.customerId,
+      customerName: loan.customerName,
+      loanId: loan.id,
+      loanNumber: loan.loanNumber,
+      outstandingPrincipalPaise: loan.outstandingPrincipal,
+      penaltyAccruedPaise: loan.penaltyAccrued,
+    },
+    after: {
+      receiptNumber,
+      dueAmountReceivedPaise: input.amountPaise,
+      principalReducedPaise: allocation.allocatedPrincipal,
+      interestClearedPaise: allocation.allocatedInterest,
+      penaltyClearedPaise: allocation.allocatedPenalty,
+      newOutstandingPaise: newOutstanding,
+      paymentMode: input.mode,
+      paidOn: input.paidOn || now,
+      referenceNo: input.referenceNo,
+      notes: input.notes,
+    },
+    metadata: {
+      customerId: loan.customerId,
+      customerName: loan.customerName,
+      loanId: loan.id,
+      loanNumber: loan.loanNumber,
+      receiptNumber,
+      mode: input.mode,
+      isFullyClosed,
+      checklist: {
+        dueAmountReceived: true,
+        receivedAmountPaise: input.amountPaise,
+        principalReducedPaise: allocation.allocatedPrincipal,
+        interestAllocatedPaise: allocation.allocatedInterest,
+        penaltyAllocatedPaise: allocation.allocatedPenalty,
+        loanBalanceReducedAccurately: true,
+        previousBalancePaise: loan.outstandingPrincipal,
+        updatedRemainingBalancePaise: newOutstanding,
+        receiptNumber,
+        adminConfirmed: true,
+      },
+    },
+  });
 
   localPaymentsCache.unshift(domainPayment);
   return { payment: domainPayment, updatedLoan };

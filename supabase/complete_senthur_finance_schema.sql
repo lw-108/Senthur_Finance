@@ -516,11 +516,13 @@ GRANT EXECUTE ON FUNCTION public.get_user_role(UUID) TO authenticated;
 -- 6.1 Organizations
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS org_select ON public.organizations;
 CREATE POLICY org_select ON public.organizations
     FOR SELECT
     TO authenticated
     USING (id IN (SELECT public.get_user_org_ids()));
 
+DROP POLICY IF EXISTS org_update ON public.organizations;
 CREATE POLICY org_update ON public.organizations
     FOR UPDATE
     TO authenticated
@@ -530,11 +532,13 @@ CREATE POLICY org_update ON public.organizations
 -- 6.2 Organization Members
 ALTER TABLE public.organization_members ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS member_select ON public.organization_members;
 CREATE POLICY member_select ON public.organization_members
     FOR SELECT
     TO authenticated
     USING (organization_id IN (SELECT public.get_user_org_ids()));
 
+DROP POLICY IF EXISTS member_insert ON public.organization_members;
 CREATE POLICY member_insert ON public.organization_members
     FOR INSERT
     TO authenticated
@@ -543,6 +547,7 @@ CREATE POLICY member_insert ON public.organization_members
         AND (role <> 'owner' OR public.get_user_role(organization_id) = 'owner')
     );
 
+DROP POLICY IF EXISTS member_update ON public.organization_members;
 CREATE POLICY member_update ON public.organization_members
     FOR UPDATE
     TO authenticated
@@ -552,6 +557,7 @@ CREATE POLICY member_update ON public.organization_members
         AND (role <> 'owner' OR public.get_user_role(organization_id) = 'owner')
     );
 
+DROP POLICY IF EXISTS member_delete ON public.organization_members;
 CREATE POLICY member_delete ON public.organization_members
     FOR DELETE
     TO authenticated
@@ -563,16 +569,19 @@ CREATE POLICY member_delete ON public.organization_members
 -- 6.3 Organization Settings
 ALTER TABLE public.organization_settings ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS settings_select ON public.organization_settings;
 CREATE POLICY settings_select ON public.organization_settings
     FOR SELECT
     TO authenticated
     USING (organization_id IN (SELECT public.get_user_org_ids()));
 
+DROP POLICY IF EXISTS settings_insert ON public.organization_settings;
 CREATE POLICY settings_insert ON public.organization_settings
     FOR INSERT
     TO authenticated
     WITH CHECK (public.get_user_role(organization_id) IN ('owner', 'admin'));
 
+DROP POLICY IF EXISTS settings_update ON public.organization_settings;
 CREATE POLICY settings_update ON public.organization_settings
     FOR UPDATE
     TO authenticated
@@ -582,11 +591,13 @@ CREATE POLICY settings_update ON public.organization_settings
 -- 6.4 Customers
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS customers_select ON public.customers;
 CREATE POLICY customers_select ON public.customers
     FOR SELECT
     TO authenticated
     USING (organization_id IN (SELECT public.get_user_org_ids()));
 
+DROP POLICY IF EXISTS customers_insert ON public.customers;
 CREATE POLICY customers_insert ON public.customers
     FOR INSERT
     TO authenticated
@@ -595,6 +606,7 @@ CREATE POLICY customers_insert ON public.customers
         AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
     );
 
+DROP POLICY IF EXISTS customers_update ON public.customers;
 CREATE POLICY customers_update ON public.customers
     FOR UPDATE
     TO authenticated
@@ -607,6 +619,7 @@ CREATE POLICY customers_update ON public.customers
         AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
     );
 
+DROP POLICY IF EXISTS customers_delete ON public.customers;
 CREATE POLICY customers_delete ON public.customers
     FOR DELETE
     TO authenticated
@@ -618,11 +631,13 @@ CREATE POLICY customers_delete ON public.customers
 -- 6.5 Loans
 ALTER TABLE public.loans ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS loans_select ON public.loans;
 CREATE POLICY loans_select ON public.loans
     FOR SELECT
     TO authenticated
     USING (organization_id IN (SELECT public.get_user_org_ids()));
 
+DROP POLICY IF EXISTS loans_insert ON public.loans;
 CREATE POLICY loans_insert ON public.loans
     FOR INSERT
     TO authenticated
@@ -631,6 +646,7 @@ CREATE POLICY loans_insert ON public.loans
         AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
     );
 
+DROP POLICY IF EXISTS loans_update ON public.loans;
 CREATE POLICY loans_update ON public.loans
     FOR UPDATE
     TO authenticated
@@ -643,6 +659,7 @@ CREATE POLICY loans_update ON public.loans
         AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
     );
 
+DROP POLICY IF EXISTS loans_delete ON public.loans;
 CREATE POLICY loans_delete ON public.loans
     FOR DELETE
     TO authenticated
@@ -654,11 +671,13 @@ CREATE POLICY loans_delete ON public.loans
 -- 6.6 Loan Schedules
 ALTER TABLE public.loan_schedules ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS schedules_select ON public.loan_schedules;
 CREATE POLICY schedules_select ON public.loan_schedules
     FOR SELECT
     TO authenticated
     USING (organization_id IN (SELECT public.get_user_org_ids()));
 
+DROP POLICY IF EXISTS schedules_write ON public.loan_schedules;
 CREATE POLICY schedules_write ON public.loan_schedules
     FOR ALL
     TO authenticated
@@ -674,11 +693,13 @@ CREATE POLICY schedules_write ON public.loan_schedules
 -- 6.7 Payments
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS payments_select ON public.payments;
 CREATE POLICY payments_select ON public.payments
     FOR SELECT
     TO authenticated
     USING (organization_id IN (SELECT public.get_user_org_ids()));
 
+DROP POLICY IF EXISTS payments_insert ON public.payments;
 CREATE POLICY payments_insert ON public.payments
     FOR INSERT
     TO authenticated
@@ -687,6 +708,7 @@ CREATE POLICY payments_insert ON public.payments
         AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
     );
 
+DROP POLICY IF EXISTS payments_update ON public.payments;
 CREATE POLICY payments_update ON public.payments
     FOR UPDATE
     TO authenticated
@@ -699,6 +721,7 @@ CREATE POLICY payments_update ON public.payments
         AND public.get_user_role(organization_id) IN ('owner', 'admin')
     );
 
+DROP POLICY IF EXISTS payments_delete ON public.payments;
 CREATE POLICY payments_delete ON public.payments
     FOR DELETE
     TO authenticated
@@ -710,11 +733,13 @@ CREATE POLICY payments_delete ON public.payments
 -- 6.8 Documents Metadata
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS documents_select ON public.documents;
 CREATE POLICY documents_select ON public.documents
     FOR SELECT
     TO authenticated
     USING (organization_id IN (SELECT public.get_user_org_ids()));
 
+DROP POLICY IF EXISTS documents_insert ON public.documents;
 CREATE POLICY documents_insert ON public.documents
     FOR INSERT
     TO authenticated
@@ -723,6 +748,7 @@ CREATE POLICY documents_insert ON public.documents
         AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
     );
 
+DROP POLICY IF EXISTS documents_delete ON public.documents;
 CREATE POLICY documents_delete ON public.documents
     FOR DELETE
     TO authenticated
@@ -734,21 +760,25 @@ CREATE POLICY documents_delete ON public.documents
 -- 6.9 Audit Events (Strictly Append-Only)
 ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS audit_select ON public.audit_events;
 CREATE POLICY audit_select ON public.audit_events
     FOR SELECT
     TO authenticated
     USING (organization_id IN (SELECT public.get_user_org_ids()));
 
+DROP POLICY IF EXISTS audit_insert ON public.audit_events;
 CREATE POLICY audit_insert ON public.audit_events
     FOR INSERT
     TO authenticated
     WITH CHECK (organization_id IN (SELECT public.get_user_org_ids()));
 
+DROP POLICY IF EXISTS audit_deny_update ON public.audit_events;
 CREATE POLICY audit_deny_update ON public.audit_events
     FOR UPDATE
     TO authenticated
     USING (false);
 
+DROP POLICY IF EXISTS audit_deny_delete ON public.audit_events;
 CREATE POLICY audit_deny_delete ON public.audit_events
     FOR DELETE
     TO authenticated
@@ -795,6 +825,7 @@ END;
 $$;
 
 -- Storage Policies: SELECT, INSERT, UPDATE (required for upsert), DELETE
+DROP POLICY IF EXISTS "tenant_storage_select" ON storage.objects;
 CREATE POLICY "tenant_storage_select" ON storage.objects
     FOR SELECT
     TO authenticated
@@ -803,6 +834,7 @@ CREATE POLICY "tenant_storage_select" ON storage.objects
         AND public.get_storage_path_org_id(name) IN (SELECT public.get_user_org_ids())
     );
 
+DROP POLICY IF EXISTS "tenant_storage_insert" ON storage.objects;
 CREATE POLICY "tenant_storage_insert" ON storage.objects
     FOR INSERT
     TO authenticated
@@ -812,6 +844,7 @@ CREATE POLICY "tenant_storage_insert" ON storage.objects
         AND public.get_user_role(public.get_storage_path_org_id(name)) IN ('owner', 'admin', 'staff')
     );
 
+DROP POLICY IF EXISTS "tenant_storage_update" ON storage.objects;
 CREATE POLICY "tenant_storage_update" ON storage.objects
     FOR UPDATE
     TO authenticated
@@ -826,6 +859,7 @@ CREATE POLICY "tenant_storage_update" ON storage.objects
         AND public.get_user_role(public.get_storage_path_org_id(name)) IN ('owner', 'admin', 'staff')
     );
 
+DROP POLICY IF EXISTS "tenant_storage_delete" ON storage.objects;
 CREATE POLICY "tenant_storage_delete" ON storage.objects
     FOR DELETE
     TO authenticated

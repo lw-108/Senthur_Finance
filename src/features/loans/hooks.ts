@@ -10,6 +10,8 @@ import {
 import { Loan, LoanFilterParams } from './types';
 import { ScheduleInstallment } from '@/lib/finance/types';
 
+import { AUDIT_LOGS_QUERY_KEY } from '@/features/audit/hooks';
+
 export const LOANS_QUERY_KEY = 'loans';
 export const LOAN_SCHEDULE_QUERY_KEY = 'loan_schedule';
 
@@ -56,6 +58,7 @@ export function useCreateLoan() {
     }) => createLoanWithSchedule(adminUid, data, schedule),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [LOANS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [AUDIT_LOGS_QUERY_KEY] });
     },
   });
 }
@@ -70,6 +73,7 @@ export function useUpdateLoan() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: [LOANS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: [LOANS_QUERY_KEY, adminUid, vars.loanId] });
+      queryClient.invalidateQueries({ queryKey: [AUDIT_LOGS_QUERY_KEY] });
     },
   });
 }

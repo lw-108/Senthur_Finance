@@ -220,7 +220,7 @@ export default function NewLoanScreen() {
       <Header
         showBack
         onBack={prev}
-        title="Disburse Loan"
+        title="Give New Loan"
         showSupportPill={false}
       />
 
@@ -233,20 +233,20 @@ export default function NewLoanScreen() {
             : draft.currentStep === 2
             ? 'Amount & Rate'
             : draft.currentStep === 3
-            ? 'Schedule'
+            ? 'Duration'
             : draft.currentStep === 4
             ? 'Security'
-            : 'Confirm & Disburse'
+            : 'Confirm & Save'
         }
         nextStepTitle={
           draft.currentStep === 1
             ? 'Amount & Rate'
             : draft.currentStep === 2
-            ? 'Schedule'
+            ? 'Duration'
             : draft.currentStep === 3
             ? 'Security'
             : draft.currentStep === 4
-            ? 'Confirm & Disburse'
+            ? 'Confirm & Save'
             : undefined
         }
       />
@@ -276,8 +276,8 @@ export default function NewLoanScreen() {
           />
 
           <Input
-            label="Specific Loan Purpose / Description"
-            placeholder="e.g. Working capital for raw material inventory"
+            label="Loan Reason / Description (Optional)"
+            placeholder="e.g. Shop expense, Medical, Vehicle purchase"
             value={draft.title}
             onChangeText={(val) => draft.setField('title', val)}
             leadingIcon="create-outline"
@@ -289,35 +289,35 @@ export default function NewLoanScreen() {
       {draft.currentStep === 2 && (
         <View style={styles.stepContainer}>
           <DisplayTitle
-            title="Principal & Rate"
-            subtitle="Configure interest scheme, rates and deductions"
+            title="Loan Amount & Interest"
+            subtitle="Set loan amount, interest rate and fees"
           />
 
           <CurrencyInput
-            label="Disbursement Principal *"
+            label="Loan Amount Given *"
             value={draft.principalPaise / 100}
             onChangeValue={(amt) => draft.setField('principalPaise', amt * 100)}
             quickAmounts={[50000, 100000, 200000, 500000]}
           />
 
           <SelectModal
-            label="Interest Calculation Scheme *"
+            label="Interest Type *"
             selectedValue={draft.interestType}
             onSelect={(val) => draft.setField('interestType', val as any)}
             options={[
-              { label: 'Reducing Balance EMI', value: 'REDUCING_BALANCE', subtitle: 'Standard periodic reducing balance' },
-              { label: 'Simple Interest', value: 'SIMPLE', subtitle: 'P × R × T on principal' },
-              { label: 'Flat Rate', value: 'FLAT', subtitle: 'Equal interest per installment on initial principal' },
-              { label: 'Interest Only (Bullet Principal)', value: 'INTEREST_ONLY', subtitle: 'Periodic interest, principal at end' },
-              { label: 'Zero Interest (Direct Installments)', value: 'ZERO_INTEREST', subtitle: 'Split principal equally' },
+              { label: 'Monthly Diminishing (Reducing EMI)', value: 'REDUCING_BALANCE', subtitle: 'Interest reduces as principal is paid' },
+              { label: 'Simple Interest (Vaddi)', value: 'SIMPLE', subtitle: 'Normal monthly / yearly interest' },
+              { label: 'Flat Rate (Equal Due)', value: 'FLAT', subtitle: 'Fixed equal interest added per due' },
+              { label: 'Interest Only (Vaddi Only)', value: 'INTEREST_ONLY', subtitle: 'Pay interest every month, principal at end' },
+              { label: '0% No Interest (Split Principal)', value: 'ZERO_INTEREST', subtitle: 'Equal installments with 0 interest' },
             ]}
           />
 
           <View style={styles.row}>
             <View style={styles.col}>
               <Input
-                label="Rate Value *"
-                placeholder="14"
+                label="Interest Rate (%) *"
+                placeholder="2"
                 keyboardType="numeric"
                 value={draft.interestRate.toString()}
                 onChangeText={(val) => draft.setField('interestRate', parseFloat(val) || 0)}
@@ -330,8 +330,8 @@ export default function NewLoanScreen() {
                 selectedValue={draft.ratePeriod}
                 onSelect={(val) => draft.setField('ratePeriod', val as any)}
                 options={[
-                  { label: '% per Year (p.a.)', value: 'PER_YEAR' },
-                  { label: '% per Month (e.g. ₹2/₹100)', value: 'PER_MONTH' },
+                  { label: '% per Month (e.g. ₹2 Vaddi)', value: 'PER_MONTH' },
+                  { label: '% per Year (Annual)', value: 'PER_YEAR' },
                   { label: '% per Week', value: 'PER_WEEK' },
                   { label: '% per Day', value: 'PER_DAY' },
                 ]}
@@ -340,7 +340,7 @@ export default function NewLoanScreen() {
           </View>
 
           <Input
-            label="Upfront Processing Fee / Deduction (₹)"
+            label="File Charges / Deductions (₹)"
             placeholder="0"
             keyboardType="numeric"
             value={draft.upfrontDeductionPaise ? (draft.upfrontDeductionPaise / 100).toString() : ''}
@@ -356,14 +356,14 @@ export default function NewLoanScreen() {
       {draft.currentStep === 3 && (
         <View style={styles.stepContainer}>
           <DisplayTitle
-            title="Tenure & Schedule"
+            title="Duration & Due Dates"
             subtitle="Repayment cycle and duration"
           />
 
           <View style={styles.row}>
             <View style={styles.col}>
               <Input
-                label="Tenure Duration *"
+                label="Duration *"
                 placeholder="12"
                 keyboardType="numeric"
                 value={draft.tenureValue.toString()}
@@ -387,28 +387,28 @@ export default function NewLoanScreen() {
           </View>
 
           <SelectModal
-            label="Repayment Frequency *"
+            label="Due Collection Schedule *"
             selectedValue={draft.repaymentFrequency}
             onSelect={(val) => draft.setField('repaymentFrequency', val as any)}
             options={[
-              { label: 'Monthly Repayment', value: 'MONTHLY' },
-              { label: 'Weekly Repayment', value: 'WEEKLY' },
-              { label: 'Daily Collection (e.g. 100-day)', value: 'DAILY' },
-              { label: 'Bullet (End of Term)', value: 'BULLET' },
+              { label: 'Daily Due (Daily Collection)', value: 'DAILY' },
+              { label: 'Weekly Due (Every Week)', value: 'WEEKLY' },
+              { label: 'Monthly Due (Every Month)', value: 'MONTHLY' },
+              { label: 'One Time (At End of Term)', value: 'BULLET' },
             ]}
           />
 
           {/* Live Schedule Calculation Summary */}
           <Card variant="lavender" style={[styles.liveSummaryBox, { backgroundColor: colors.boxBackground, borderColor: colors.boxBorder, borderWidth: 1 }]}>
-            <Text style={[styles.liveSummaryTitle, { color: colors.headingPrimary }]}>LIVE REPAYMENT ESTIMATE</Text>
+            <Text style={[styles.liveSummaryTitle, { color: colors.headingPrimary }]}>PAYMENT ESTIMATE</Text>
 
             <View style={styles.summaryItemRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Installment (EMI):</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Due Amount (EMI):</Text>
               <Text style={[styles.emiHighlight, { color: colors.primary }]}>{emiFormatted}</Text>
             </View>
 
             <View style={styles.summaryItemRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Installments:</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Number of Dues:</Text>
               <Text style={[styles.summaryValue, { color: colors.ink }]}>{draft.preview.numberOfInstallments}</Text>
             </View>
 
@@ -517,7 +517,7 @@ export default function NewLoanScreen() {
         <View style={styles.stepContainer}>
           <DisplayTitle
             title="Confirm Loan"
-            subtitle="Verify loan parameters before recording disbursement"
+            subtitle="Check loan details before saving"
           />
 
           <HeroLoanCard
@@ -527,7 +527,7 @@ export default function NewLoanScreen() {
             outstandingAmount={principalFormatted}
             nextDueDate={draft.preview.schedule[0]?.dueDate}
             bigStat={emiFormatted}
-            bigStatCaption="Monthly EMI"
+            bigStatCaption="Due Amount"
           />
 
           <Card variant="surface" style={[styles.confirmCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
@@ -536,17 +536,17 @@ export default function NewLoanScreen() {
               <Text style={[styles.summaryValue, { color: colors.ink }]}>{draft.customerName}</Text>
             </View>
             <View style={styles.summaryItemRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Disbursed Principal:</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Loan Given:</Text>
               <Text style={[styles.summaryValue, { color: colors.ink }]}>{principalFormatted}</Text>
             </View>
             <View style={styles.summaryItemRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Interest Scheme:</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Interest Type:</Text>
               <Text style={[styles.summaryValue, { color: colors.ink }]}>
                 {draft.interestType} @ {draft.interestRate}%
               </Text>
             </View>
             <View style={styles.summaryItemRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Tenure:</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Duration:</Text>
               <Text style={[styles.summaryValue, { color: colors.ink }]}>
                 {draft.tenureValue} {draft.tenureUnit} ({draft.repaymentFrequency})
               </Text>
@@ -589,8 +589,8 @@ export default function NewLoanScreen() {
               : draft.currentStep === 3
               ? 'Security'
               : draft.currentStep === 4
-              ? 'Confirm & Disburse'
-              : 'Confirm & Disburse'
+              ? 'Confirm & Save'
+              : 'Confirm & Give Loan'
           }
           iconName={draft.currentStep === 5 ? 'checkmark-circle' : 'arrow-forward'}
           iconPosition="right"

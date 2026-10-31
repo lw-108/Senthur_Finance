@@ -12,11 +12,18 @@
     },
     "android": {
       "adaptiveIcon": {
-"backgroundColor": "#FFFFFF",
-"foregroundImage": "./assets/images/vel.png"
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/images/vel.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.senthurfinance"
+      "package": "com.senthurfinance",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "web": {
       "output": "static",
@@ -26,13 +33,20 @@
       "expo-dev-client",
       "expo-router",
       [
-"expo-splash-screen",
-{
-  "backgroundColor": "#FFFFFF",
-  "image": "./assets/images/vinayagar.jpg",
-  "imageWidth": 200,
-  "resizeMode": "contain"
-}
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/images/vinayagar.jpg",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Senthur Finance to access your photos to select profile pictures and KYC documents.",
+          "cameraPermission": "Allow Senthur Finance to access your camera to take profile photos and KYC documents."
+        }
       ],
       "expo-secure-store",
       "expo-sharing",
@@ -49,7 +63,7 @@
     "extra": {
       "router": {},
       "eas": {
-"projectId": "9a480c1f-221e-4155-aace-99956575502c"
+        "projectId": "9a480c1f-221e-4155-aace-99956575502c"
       }
     }
   }

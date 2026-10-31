@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +22,8 @@ import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { useLoans } from '@/features/loans/hooks';
 import { usePayments } from '@/features/payments/hooks';
+import { Payment } from '@/features/payments/types';
+import { PaymentReceiptModal } from '@/features/payments/components/PaymentReceiptModal';
 import { useCustomers } from '@/features/customers/hooks';
 import { useAuditLogs } from '@/features/audit/hooks';
 import { useTheme } from '@/store/useThemeStore';
@@ -35,6 +37,8 @@ export default function HomeScreen() {
   const { showSuccess } = useToast();
   const { colors } = useTheme();
   const { business } = useBusinessSettingsStore();
+  const [selectedReceiptPayment, setSelectedReceiptPayment] = useState<Payment | null>(null);
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
 
   const { data: loans, isLoading: loansLoading, refetch: refetchLoans, isRefetching: loansRefetching } = useLoans();
   const { data: payments, isLoading: paymentsLoading, refetch: refetchPayments } = usePayments();
@@ -91,7 +95,7 @@ export default function HomeScreen() {
       tenureFormatted: `${l.tenure.value} ${l.tenure.unit}`,
       statusBadge: l.status,
       highlightStat: l.status === 'OVERDUE' ? `${l.daysOverdue}d late` : remainingMonths,
-      highlightStatCaption: l.status === 'OVERDUE' ? 'Penalty accruing' : 'Tenure term',
+      highlightStatCaption: l.status === 'OVERDUE' ? 'Fine added' : 'Loan duration',
       interestRateFormatted: `${l.interestRate}% ${l.ratePeriod === 'PER_MONTH' ? 'p.m.' : 'p.a.'}`,
       iconName,
     };
@@ -130,7 +134,7 @@ export default function HomeScreen() {
 
       <DisplayTitle
         title="Track Loans in Minutes!"
-        subtitle="Live portfolio balances, collections & proofs"
+        subtitle="Track your loans, daily collections & bill receipts"
         highlightText="Minutes!"
         highlightColor={colors.primaryDark}
       />
@@ -138,17 +142,17 @@ export default function HomeScreen() {
       {/* Row 1: Primary KPI Cards - Total Received & Total Pending */}
       <View style={styles.tilesRow}>
         <Tile
-          label="Total Received"
+          label="Money Collected"
           value={formatIndianCurrency(totalReceivedPaise, { isMinorUnit: true }).formatted}
-          subtitle={`${payments?.length || 0} collections`}
+          subtitle={`${payments?.length || 0} payments`}
           iconName="checkmark-done-circle-outline"
           iconColor={colors.success}
           style={styles.flexTile}
         />
         <Tile
-          label="Total Pending"
+          label="To Collect"
           value={formatIndianCurrency(totalPendingPaise, { isMinorUnit: true }).formatted}
-          subtitle={`Across ${activeLoansCount} active loans`}
+          subtitle={`${activeLoansCount} ongoing loans`}
           iconName="hourglass-outline"
           iconColor={colors.warning}
           style={styles.flexTile}
@@ -160,14 +164,14 @@ export default function HomeScreen() {
         <Tile
           label="Active Loans"
           value={activeLoansCount}
-          subtitle={`${formatIndianCurrency(activePrincipalPaise, { isMinorUnit: true }).formatted} principal`}
+          subtitle={`${formatIndianCurrency(activePrincipalPaise, { isMinorUnit: true }).formatted} given`}
           iconName="briefcase-outline"
           iconColor={colors.primaryDark}
           style={styles.flexTile}
         />
         <Tile
           label="New Loan"
-          subtitle="Disburse & schedule"
+          subtitle="Give new loan"
           variant="action"
           hasArrowButton
           arrowIconName="arrow-forward"
@@ -220,8 +224,8 @@ export default function HomeScreen() {
           <EmptyState
             iconName="cash-outline"
             title="No Active Loans Yet"
-            description="Create borrower records and disburse loans to track live interest and schedules."
-            actionTitle="+ Create First Loan"
+            description="Add customers and give loans to track daily/weekly collections easily."
+            actionTitle="+ Give First Loan"
             onAction={() => router.push('/loans/new' as any)}
           />
         </Card>
@@ -229,7 +233,7 @@ export default function HomeScreen() {
 
       {/* Today's Collection List */}
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.headingPrimary }]}>Today's Collection List</Text>
+        <Text style={[styles.sectionTitle, { color: colors.headingPrimary }]}>{"Today's Collection List"}</Text>
       </View>
 
       {dueCollectionList.length > 0 ? (
@@ -302,6 +306,11 @@ export default function HomeScreen() {
               rightAmount={`+${formatIndianCurrency(pay.amount, { isMinorUnit: true }).formatted}`}
               rightAmountType="positive"
               rightSubtext="Repayment"
+              showChevron
+              onPress={() => {
+                setSelectedReceiptPayment(pay);
+                setReceiptModalOpen(true);
+              }}
             />
           ))
         ) : (
@@ -317,6 +326,15 @@ export default function HomeScreen() {
       <AuditLogsViewer
         logs={auditLogs || []}
         isLoading={auditLoading}
+      />
+
+      {/* Interactive Payment Receipt Modal */}
+      <PaymentReceiptModal
+        visible={receiptModalOpen}
+        onClose={() => setReceiptModalOpen(false)}
+        payment={selectedReceiptPayment}
+        loan={loans?.find((l) => l.id === selectedReceiptPayment?.loanId)}
+        customerPhone={customers?.find((c) => c.id === selectedReceiptPayment?.customerId)?.phone}
       />
     </Screen>
   );

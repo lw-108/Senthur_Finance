@@ -10,6 +10,7 @@ import {
   seedDemoCustomers,
 } from './api';
 import { Customer, CustomerFilterParams } from './types';
+import { AUDIT_LOGS_QUERY_KEY } from '@/features/audit/hooks';
 
 export const CUSTOMERS_QUERY_KEY = 'customers';
 
@@ -41,6 +42,7 @@ export function useCreateCustomer() {
       createCustomer(adminUid, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CUSTOMERS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [AUDIT_LOGS_QUERY_KEY] });
     },
   });
 }
@@ -55,6 +57,7 @@ export function useUpdateCustomer() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: [CUSTOMERS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: [CUSTOMERS_QUERY_KEY, adminUid, vars.customerId] });
+      queryClient.invalidateQueries({ queryKey: [AUDIT_LOGS_QUERY_KEY] });
     },
   });
 }

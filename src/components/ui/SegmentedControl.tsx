@@ -23,6 +23,7 @@ export function SegmentedControl<T = string>({
   style,
 }: SegmentedControlProps<T>) {
   const { colors: dynamicColors, isDark } = useTheme();
+  const isCompact = items.length >= 5;
 
   return (
     <View
@@ -45,6 +46,7 @@ export function SegmentedControl<T = string>({
             activeOpacity={0.8}
             style={[
               styles.segment,
+              isCompact && styles.compactSegment,
               isSelected && [
                 styles.selectedSegment,
                 {
@@ -58,6 +60,7 @@ export function SegmentedControl<T = string>({
             <Text
               style={[
                 styles.segmentText,
+                isCompact && styles.compactSegmentText,
                 { color: dynamicColors.textSecondary },
                 isSelected && [styles.selectedSegmentText, { color: dynamicColors.ink }],
               ]}
@@ -87,6 +90,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  compactSegment: {
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+  },
   selectedSegment: {
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
@@ -97,6 +104,9 @@ const styles = StyleSheet.create({
   segmentText: {
     fontFamily: typography.fontHeadline,
     fontSize: 13,
+  },
+  compactSegmentText: {
+    fontSize: 11.5,
   },
   selectedSegmentText: {
     fontWeight: '600',

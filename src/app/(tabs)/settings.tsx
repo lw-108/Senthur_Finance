@@ -8,6 +8,7 @@ import {
   Modal,
   ScrollView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -147,35 +148,53 @@ export default function SettingsScreen() {
     setCurrencyModalVisible(true);
   };
 
-  // Avatar Image Picker with Permanent Base64 Storage
-  const handlePickAvatar = async () => {
+  // Avatar Image Picker with Direct Selection (No Cropping to prevent Android activity locks)
+  const pickAvatarFromSource = async (source: 'camera' | 'library') => {
     try {
-      const res = await ImagePicker.launchImageLibraryAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.7,
-        base64: true,
-      });
+      let res: ImagePicker.ImagePickerResult;
+
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          showError('Camera permission is required to take a profile photo');
+          return;
+        }
+        res = await ImagePicker.launchCameraAsync({
+          allowsEditing: false,
+          quality: 0.8,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          showError('Photo library permission is required to select a photo');
+          return;
+        }
+        res = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: false,
+          quality: 0.8,
+        });
+      }
 
       if (!res.canceled && res.assets && res.assets.length > 0) {
         const asset = res.assets[0];
         let avatarUri = asset.uri;
 
-        if (asset.base64) {
-          avatarUri = asset.base64.startsWith('data:')
-            ? asset.base64
-            : `data:image/jpeg;base64,${asset.base64}`;
-        } else {
-          try {
-            const manip = await ImageManipulator.manipulateAsync(
-              asset.uri,
-              [{ resize: { width: 300, height: 300 } }],
-              { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-            );
-            if (manip.base64) {
-              avatarUri = `data:image/jpeg;base64,${manip.base64}`;
-            }
-          } catch {}
+        // Resize and optimize down to a crisp, lightweight 300x300 JPEG (~20KB)
+        // This avoids Android SQLite 2MB CursorWindow crashes and memory locks
+        try {
+          const manip = await ImageManipulator.manipulateAsync(
+            asset.uri,
+            [{ resize: { width: 300, height: 300 } }],
+            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+          if (manip.base64) {
+            avatarUri = `data:image/jpeg;base64,${manip.base64}`;
+          } else if (manip.uri) {
+            avatarUri = manip.uri;
+          }
+        } catch (manipErr) {
+          console.warn('[Avatar] Optimization notice:', manipErr);
         }
 
         await setPermanentAvatar(avatarUri);
@@ -183,9 +202,28 @@ export default function SettingsScreen() {
         await updatePhotoURL(avatarUri);
         showSuccess('Profile photo updated successfully');
       }
-    } catch {
-      showError('Failed to pick profile image');
+    } catch (err) {
+      console.error('[Avatar] Pick error:', err);
+      showError('Failed to upload profile photo');
     }
+  };
+
+  const handlePickAvatar = () => {
+    if (Platform.OS === 'web') {
+      pickAvatarFromSource('library');
+      return;
+    }
+
+    Alert.alert(
+      'Profile Photo',
+      'Select an option to update your photo:',
+      [
+        { text: 'Take Photo', onPress: () => pickAvatarFromSource('camera') },
+        { text: 'Choose from Gallery', onPress: () => pickAvatarFromSource('library') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleRemoveAvatar = async () => {
@@ -492,11 +530,11 @@ export default function SettingsScreen() {
 
       {/* SECURITY & ACCESS CONTROL */}
       <View style={styles.section}>
-        <Text style={[styles.sectionHeader, { color: colors.headingPrimary }]}>SECURITY & ACCESS CONTROL</Text>
+        <Text style={[styles.sectionHeader, { color: colors.headingPrimary }]}>APP LOCK & SECURITY</Text>
         <Card variant="surface" style={styles.card}>
           <ListRow
-            title="PIN & Password App Lock"
-            subtitle="Require PIN or password when opening the application"
+            title="Screen Lock (PIN & Password)"
+            subtitle="Ask for PIN or password when opening app"
             iconName="lock-closed-outline"
             rightNode={
               <Toggle
@@ -510,11 +548,11 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="Biometric Authentication"
+            title="Fingerprint / Face Unlock"
             subtitle={
               isBiometricAvailable
                 ? `Quick unlock with ${Platform.OS === 'ios' ? 'FaceID / TouchID' : 'Fingerprint'}`
-                : 'Biometric hardware not enrolled or available'
+                : 'Fingerprint hardware not enrolled or available'
             }
             iconName="finger-print-outline"
             rightNode={
@@ -530,16 +568,16 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="Setup / Change Security PIN"
-            subtitle="4-digit quick passcode for rapid admin lock"
+            title="Set or Change 4-Digit PIN"
+            subtitle="4-digit passcode for quick unlock"
             iconName="keypad-outline"
             showChevron
             onPress={() => setPinModalVisible(true)}
           />
 
           <ListRow
-            title="Change Admin Password"
-            subtitle="Update account master security password"
+            title="Change Password"
+            subtitle="Change your login password"
             iconName="key-outline"
             showChevron
             onPress={() => setPasswordModalVisible(true)}
@@ -549,7 +587,7 @@ export default function SettingsScreen() {
 
       {/* BUSINESS & LENDING CONFIGURATION */}
       <View style={styles.section}>
-        <Text style={[styles.sectionHeader, { color: colors.headingPrimary }]}>BUSINESS & LENDING PROFILE</Text>
+        <Text style={[styles.sectionHeader, { color: colors.headingPrimary }]}>BUSINESS & LOAN SETTINGS</Text>
         <Card variant="surface" style={styles.card}>
           <ListRow
             title="Business Profile"
@@ -560,7 +598,7 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="Currency & Regional Settings"
+            title="Currency & Numbers (₹ Rupee)"
             subtitle={`${currency.currencySymbol} ${currency.currencyCode} • ${currency.numberFormat === 'indian' ? 'Lakhs & Crores' : 'Millions & Billions'}`}
             iconName="cash-outline"
             showChevron
@@ -568,7 +606,7 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="Default Loan Rules & Schemes"
+            title="Loan Types & Interest Schemes"
             subtitle={`${loanProducts.length} active schemes • Gold, Vehicle RC, Property, Hand Loan`}
             iconName="calculator-outline"
             showChevron
@@ -576,8 +614,8 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="Initial Setup Wizard"
-            subtitle="Reconfigure organization name, theme mode, accent & permissions"
+            title="App Setup"
+            subtitle="Change company name, app colors & permissions"
             iconName="sparkles-outline"
             iconColor={colors.primaryDark}
             iconBgColor={colors.primarySoft}
@@ -589,11 +627,11 @@ export default function SettingsScreen() {
 
       {/* DATA, BACKUP & QUICK EXPORTS */}
       <View style={styles.section}>
-        <Text style={[styles.sectionHeader, { color: colors.headingPrimary }]}>DATA, BACKUP & EXPORTS</Text>
+        <Text style={[styles.sectionHeader, { color: colors.headingPrimary }]}>DATA BACKUP & DOWNLOADS</Text>
         <Card variant="surface" style={styles.card}>
           <ListRow
-            title="Reports & Statements Hub"
-            subtitle="Generate daily collection sheets, overdue audits & borrower statements"
+            title="Reports & Bill Statements"
+            subtitle="Create daily collection list, late dues & customer bills"
             iconName="document-text-outline"
             iconColor={colors.primaryDark}
             iconBgColor={colors.primarySoft}
@@ -602,8 +640,8 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="Full Ledger Backup (JSON)"
-            subtitle="Complete offline JSON snapshot of all borrowers, loans, receipts & settings"
+            title="Backup All App Data"
+            subtitle="Save a backup file of all customers, loans & bills"
             iconName="cloud-download-outline"
             iconColor={colors.primaryDark}
             iconBgColor={colors.primarySoft}
@@ -612,8 +650,8 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="Export Borrowers Roster (CSV)"
-            subtitle="Download complete customer list with contact, KYC & balances"
+            title="Download Customer List (Excel)"
+            subtitle="Save list of all customers, phone & balances"
             iconName="people-outline"
             iconColor={colors.success}
             iconBgColor={colors.successLight}
@@ -622,8 +660,8 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="Export All Loans Ledger (CSV)"
-            subtitle="Download all active and closed loan accounts with interest rates & balance"
+            title="Download All Loans List (Excel)"
+            subtitle="Save list of all loans, interest & balance"
             iconName="grid-outline"
             iconColor={colors.success}
             iconBgColor={colors.successLight}
@@ -632,8 +670,8 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="Export Repayments History (CSV)"
-            subtitle="Download collection receipts ledger with modes and timestamps"
+            title="Download All Payments List (Excel)"
+            subtitle="Save list of all paid bills & dates"
             iconName="receipt-outline"
             iconColor={colors.success}
             iconBgColor={colors.successLight}
@@ -647,8 +685,8 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <Card variant="surface" style={styles.card}>
           <ListRow
-            title="Sign Out Session"
-            subtitle="Close admin session and lock application"
+            title="Log Out"
+            subtitle="Log out from this device"
             iconName="log-out-outline"
             iconColor={colors.danger}
             iconBgColor={colors.dangerLight}

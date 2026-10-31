@@ -1,8 +1,6 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/theme/colors';
-import { shadows } from '@/theme/shadows';
 import { useTheme } from '@/store/useThemeStore';
 
 interface FABProps {
@@ -35,7 +33,6 @@ export function FAB({
       accessibilityLabel={accessibilityLabel}
       style={[
         styles.fab,
-        shadows.floating,
         {
           width: size,
           height: size,

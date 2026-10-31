@@ -246,7 +246,7 @@ export default function NewCustomerScreen() {
           />
 
           <Input
-            label="Occupation / Business"
+            label="Job / Business / Shop"
             placeholder="e.g. Textile Merchant"
             value={draft.occupation}
             onChangeText={(val) => draft.setField('occupation', val)}
@@ -254,14 +254,14 @@ export default function NewCustomerScreen() {
           />
 
           <SelectModal
-            label="Target Loan Scheme / Product"
+            label="Loan Type Needed"
             selectedValue={draft.tags[0] || (loanProductOptions[0]?.value || 'Gold Loan (Jewel Loan)')}
             onSelect={(val) => draft.setField('tags', [val])}
             options={loanProductOptions}
           />
 
           <Input
-            label="Monthly Income (₹)"
+            label="Monthly Income / Earnings (₹)"
             placeholder="e.g. 65000"
             keyboardType="numeric"
             value={draft.monthlyIncome ? draft.monthlyIncome.toString() : ''}
@@ -331,12 +331,12 @@ export default function NewCustomerScreen() {
       {draft.currentStep === 3 && (
         <View style={styles.stepContainer}>
           <DisplayTitle
-            title="KYC Documents"
-            subtitle="Government recognized identification with photos"
+            title="ID Proofs (Aadhaar / Voter / PAN)"
+            subtitle="Photo of Aadhaar card, PAN card or Voter ID"
           />
 
           <SelectModal
-            label="Primary Identity Document *"
+            label="ID Card Type *"
             selectedValue={draft.idProofs[0]?.type || 'Aadhaar'}
             onSelect={(val) => {
               const updated = [...draft.idProofs];
@@ -391,12 +391,12 @@ export default function NewCustomerScreen() {
       {draft.currentStep === 4 && (
         <View style={styles.stepContainer}>
           <DisplayTitle
-            title="Guarantor & Reference"
-            subtitle="Co-signer or trusted local contact"
+            title="Surety & Reference Person"
+            subtitle="Witness or person who knows the customer"
           />
 
           <Input
-            label="Guarantor Full Name"
+            label="Surety Full Name"
             placeholder="e.g. V. Senthil"
             value={draft.guarantor.name}
             onChangeText={(val) =>

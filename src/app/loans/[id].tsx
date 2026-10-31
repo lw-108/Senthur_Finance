@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -9,7 +9,6 @@ import {
   SegmentedControl,
   Card,
   ListRow,
-  Badge,
   PillButton,
   EmptyState,
   SkeletonLoader,
@@ -21,6 +20,8 @@ import { useTheme } from '@/store/useThemeStore';
 import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 import { useLoan, useLoanSchedule, useUpdateLoan } from '@/features/loans/hooks';
 import { usePayments } from '@/features/payments/hooks';
+import { Payment } from '@/features/payments/types';
+import { PaymentReceiptModal } from '@/features/payments/components/PaymentReceiptModal';
 import { formatIndianCurrency, formatDate } from '@/utils/formatters';
 import { openWhatsApp } from '@/utils/whatsapp';
 import { calculateForeclosureQuote } from '@/lib/finance';
@@ -30,7 +31,7 @@ export default function LoanDetailScreen() {
   const { colors: dynamicColors } = useTheme();
   const { business } = useBusinessSettingsStore();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess } = useToast();
 
   const { data: loan, isLoading } = useLoan(id);
   const { data: schedule } = useLoanSchedule(id);
@@ -38,6 +39,8 @@ export default function LoanDetailScreen() {
   const updateLoanMutation = useUpdateLoan();
 
   const [activeTab, setActiveTab] = useState<'schedule' | 'payments' | 'proofs' | 'settlement'>('schedule');
+  const [selectedReceiptPayment, setSelectedReceiptPayment] = useState<Payment | null>(null);
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -159,10 +162,10 @@ export default function LoanDetailScreen() {
       {/* Segmented Tabs */}
       <SegmentedControl
         items={[
-          { label: 'Schedule', value: 'schedule' },
+          { label: 'Due List', value: 'schedule' },
           { label: 'Payments', value: 'payments' },
           { label: 'Security', value: 'proofs' },
-          { label: 'Foreclose', value: 'settlement' },
+          { label: 'Close Loan', value: 'settlement' },
         ]}
         selectedValue={activeTab}
         onSelect={(val) => setActiveTab(val as any)}
@@ -219,6 +222,10 @@ export default function LoanDetailScreen() {
                   rightAmountType="positive"
                   rightSubtext="Allocated: P+I"
                   showChevron
+                  onPress={() => {
+                    setSelectedReceiptPayment(p);
+                    setReceiptModalOpen(true);
+                  }}
                 />
               ))}
             </Card>
@@ -240,8 +247,8 @@ export default function LoanDetailScreen() {
           <Card variant="surface" style={styles.cardBox}>
             {loan.collateral.type !== 'None' && (
               <ListRow
-                title={`${loan.collateral.type} Collateral`}
-                subtitle={loan.collateral.description || 'Pledged collateral on file'}
+                title={`${loan.collateral.type} Security / Pledge`}
+                subtitle={loan.collateral.description || 'Pledged security on file'}
                 metaText={
                   loan.collateral.estimatedValue
                     ? `Estimated Value: ${formatIndianCurrency(loan.collateral.estimatedValue, { isMinorUnit: true }).formatted}`
@@ -314,6 +321,14 @@ export default function LoanDetailScreen() {
           />
         </View>
       )}
+
+      {/* Interactive Payment Receipt Modal */}
+      <PaymentReceiptModal
+        visible={receiptModalOpen}
+        onClose={() => setReceiptModalOpen(false)}
+        payment={selectedReceiptPayment}
+        loan={loan}
+      />
     </Screen>
   );
 }

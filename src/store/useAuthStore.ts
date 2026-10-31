@@ -129,7 +129,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Check persistent active session state
       const sessionActiveStr = await secureStorage.getItem(SESSION_ACTIVE_KEY);
       const isSessionActive = sessionActiveStr !== null ? sessionActiveStr === 'true' : true;
-      const shouldBeUnlocked = hasStoredAccount && (isSessionActive || !isLockEnabled);
+      let shouldBeUnlocked = hasStoredAccount && (isSessionActive || !isLockEnabled);
+
+      let resolvedUser: User | null = null;
+      let resolvedProfile: StoredUserProfile | null = storedUser;
 
       // Supabase Auth Session Initialization & Subscription
       if (isSupabaseConfigured()) {
@@ -163,15 +166,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               }
             } catch {}
 
-            set({
-              user: sbUser,
-              storedUser: profile,
-              hasStoredAccount: true,
-              adminUid: sbUser.id,
-              isLocked: false,
-              isAuthenticatedSession: true,
-              isInitialized: true,
-            });
+            resolvedUser = sbUser;
+            resolvedProfile = profile;
+            shouldBeUnlocked = true;
           }
 
           // Listen for live Supabase Auth state changes
@@ -206,10 +203,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
 
+      const finalHasStoredAccount = Boolean(resolvedProfile || resolvedUser || hasStoredAccount);
+
       set({
-        storedUser,
-        adminUid: storedUser?.uid || '',
-        hasStoredAccount,
+        user: resolvedUser ?? get().user,
+        storedUser: resolvedProfile,
+        adminUid: resolvedUser?.id || resolvedProfile?.uid || '',
+        hasStoredAccount: finalHasStoredAccount,
         hasPasswordSet,
         hasPinSet,
         isBiometricAvailable,
@@ -219,7 +219,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticatedSession: shouldBeUnlocked,
         isInitialized: true,
       });
-    } catch (e) {
+    } catch {
       set({ isInitialized: true });
     }
   },
@@ -227,7 +227,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signInWithGoogle: async () => {
     try {
       if (isSupabaseConfigured()) {
-        const { data, error } = await supabase.auth.signInWithOAuth({
+        const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
             redirectTo: Platform.OS === 'web' ? window.location.origin : 'senthurfinance://auth/callback',
@@ -537,6 +537,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         };
     await secureStorage.setItem(STORED_USER_KEY, JSON.stringify(updated));
     set({ storedUser: updated });
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.auth.updateUser({
+          data: { avatar_url: photoURL },
+        });
+      } catch {}
+    }
   },
 
   setUserPassword: async (password: string) => {

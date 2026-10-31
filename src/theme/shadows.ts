@@ -54,18 +54,11 @@ export const shadows = {
     },
   }) as ViewStyle,
 
-  floating: Platform.select({
-    ios: {
-      shadowColor: '#B79CE8',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.28,
-      shadowRadius: 20,
-    },
-    android: {
-      elevation: 6,
-    },
-    default: {
-      boxShadow: '0 8px 20px rgba(183, 156, 232, 0.28)',
-    },
-  }) as ViewStyle,
+  floating: {
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+  } satisfies ViewStyle,
 };

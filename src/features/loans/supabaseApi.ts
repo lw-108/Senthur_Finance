@@ -338,6 +338,12 @@ export async function createLoan(
           principalPaise: domain.principal,
           category: domain.category,
         },
+        metadata: {
+          customerId: domain.customerId,
+          customerName: domain.customerName,
+          loanId: domain.id,
+          loanNumber: domain.loanNumber,
+        },
       });
 
       localLoansCache.unshift(domain);
@@ -357,6 +363,25 @@ export async function createLoan(
     createdBy: userId || 'local_user',
     isDeleted: false,
   };
+
+  await recordAuditLog({
+    action: 'CREATE',
+    entityType: 'LOAN',
+    entityId: mockId,
+    summary: `Disbursed new ${mockLoan.category} loan #${mockLoan.loanNumber} to ${mockLoan.customerName} for ₹${(mockLoan.principal / 100).toLocaleString('en-IN')}`,
+    after: {
+      loanNumber: mockLoan.loanNumber,
+      customerName: mockLoan.customerName,
+      principalPaise: mockLoan.principal,
+      category: mockLoan.category,
+    },
+    metadata: {
+      customerId: mockLoan.customerId,
+      customerName: mockLoan.customerName,
+      loanId: mockLoan.id,
+      loanNumber: mockLoan.loanNumber,
+    },
+  });
   localLoansCache.unshift(mockLoan);
   if (scheduleInstallments) {
     localSchedulesCache[mockId] = scheduleInstallments;
