@@ -22,7 +22,9 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT"
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS"
       ]
     },
     "web": {
@@ -48,12 +50,17 @@
           "cameraPermission": "Allow Senthur Finance to access your camera to take profile photos and KYC documents."
         }
       ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Senthur Finance to access your contacts to import and merge borrowers."
+        }
+      ],
       "expo-secure-store",
       "expo-sharing",
       "expo-image",
       "expo-camera",
       "expo-file-system",
-      "expo-contacts",
       "expo-local-authentication"
     ],
     "experiments": {

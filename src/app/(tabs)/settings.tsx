@@ -457,7 +457,7 @@ export default function SettingsScreen() {
                 </View>
               </View>
 
-              <Text style={[styles.profileEmail, { color: colors.textTertiary }]}>{user?.email || business.email || 'admin@ledger.local'}</Text>
+              <Text style={[styles.profileEmail, { color: colors.textTertiary }]}>{user?.email || business.email || ''}</Text>
 
               <View style={styles.avatarActionsRow}>
                 <TouchableOpacity onPress={handlePickAvatar} style={styles.avatarActionBtn}>

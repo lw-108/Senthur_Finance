@@ -1,14 +1,36 @@
 import { supabase, isSupabaseConfigured, isValidUUID } from '@/lib/supabase/client';
 import { getActiveOrganizationId } from '@/lib/supabase/activeOrg';
 import { Customer, CustomerFilterParams } from './types';
-import { getDemoCustomers } from './demoData';
 import { recordAuditLog } from '@/features/audit/supabaseApi';
+import { secureStorage } from '@/lib/storage/secureStorage';
 
-// Fallback in-memory cache for offline/demo operation
-let localCustomersCache: Customer[] = getDemoCustomers('admin_demo');
+const LOCAL_CUSTOMERS_KEY = 'sf_local_customers_cache_v2';
 
-export function seedDemoCustomers(adminUid: string): Customer[] {
-  localCustomersCache = getDemoCustomers(adminUid || 'admin_demo');
+// In-memory cache for fast UI updates & offline fallback
+let localCustomersCache: Customer[] = [];
+let isCacheLoaded = false;
+
+async function ensureLocalCacheLoaded() {
+  if (isCacheLoaded) return;
+  try {
+    const raw = await secureStorage.getItem(LOCAL_CUSTOMERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        localCustomersCache = parsed;
+      }
+    }
+  } catch {}
+  isCacheLoaded = true;
+}
+
+async function persistLocalCache() {
+  try {
+    await secureStorage.setItem(LOCAL_CUSTOMERS_KEY, JSON.stringify(localCustomersCache));
+  } catch {}
+}
+
+export function seedDemoCustomers(_adminUid: string): Customer[] {
   return localCustomersCache;
 }
 
@@ -85,6 +107,8 @@ export async function fetchCustomers(
   _adminUid?: string,
   params?: CustomerFilterParams
 ): Promise<Customer[]> {
+  await ensureLocalCacheLoaded();
+
   if (isSupabaseConfigured()) {
     try {
       const orgId = await getActiveOrganizationId();
@@ -109,6 +133,12 @@ export async function fetchCustomers(
       const { data, error } = await query;
       if (!error && data) {
         let domainList = data.map(customerRowToDomain);
+        if (domainList.length > 0) {
+          // Merge Supabase records with local cache
+          localCustomersCache = domainList;
+          persistLocalCache();
+        }
+
         if (params?.status === 'OVERDUE_ONLY') {
           domainList = domainList.filter((c) => c.totals.overdueAmount > 0);
         }
@@ -120,7 +150,10 @@ export async function fetchCustomers(
         if (params?.tag) {
           domainList = domainList.filter((c) => c.tags.includes(params.tag!));
         }
-        return domainList;
+
+        if (domainList.length > 0 || localCustomersCache.length === 0) {
+          return domainList;
+        }
       }
     } catch (e) {
       console.warn('[Customers Supabase] Query failed, serving local cache:', e);
@@ -210,6 +243,7 @@ export async function createCustomer(
   _adminUid: string,
   data: Omit<Customer, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'isDeleted'>
 ): Promise<Customer> {
+  await ensureLocalCacheLoaded();
   const orgId = await getActiveOrganizationId();
   const { data: userRes } = await supabase.auth.getUser();
   const userId = userRes?.user?.id || null;
@@ -228,7 +262,8 @@ export async function createCustomer(
       }
 
       const domain = customerRowToDomain(inserted);
-      localCustomersCache.unshift(domain);
+      localCustomersCache = [domain, ...localCustomersCache.filter((c) => c.id !== domain.id)];
+      await persistLocalCache();
 
       // Audit trail
       await recordAuditLog({
@@ -247,11 +282,11 @@ export async function createCustomer(
 
       return domain;
     } catch (e: any) {
-      console.error('[Customers Supabase] createCustomer error:', e?.message || e);
+      console.warn('[Customers Supabase] createCustomer error, saving locally:', e?.message || e);
     }
   }
 
-  // Fallback offline mock creation
+  // Fallback persistent local creation
   const mockId = `cust-${Date.now()}`;
   const mockCust: Customer = {
     ...data,
@@ -262,6 +297,7 @@ export async function createCustomer(
     isDeleted: false,
   };
   localCustomersCache.unshift(mockCust);
+  await persistLocalCache();
   return mockCust;
 }
 
@@ -270,6 +306,7 @@ export async function updateCustomer(
   customerId: string,
   updates: Partial<Customer>
 ): Promise<Customer> {
+  await ensureLocalCacheLoaded();
   const orgId = await getActiveOrganizationId();
   const now = new Date().toISOString();
 
@@ -291,7 +328,12 @@ export async function updateCustomer(
 
       const domain = customerRowToDomain(updated);
       const idx = localCustomersCache.findIndex((c) => c.id === customerId);
-      if (idx >= 0) localCustomersCache[idx] = domain;
+      if (idx >= 0) {
+        localCustomersCache[idx] = domain;
+      } else {
+        localCustomersCache.unshift(domain);
+      }
+      await persistLocalCache();
       return domain;
     } catch (e: any) {
       console.error('[Customers Supabase] updateCustomer error:', e?.message || e);
@@ -301,6 +343,7 @@ export async function updateCustomer(
   const index = localCustomersCache.findIndex((c) => c.id === customerId);
   if (index >= 0) {
     localCustomersCache[index] = { ...localCustomersCache[index], ...updates, updatedAt: now };
+    await persistLocalCache();
     return localCustomersCache[index];
   }
   throw new Error('Customer not found');
@@ -308,4 +351,147 @@ export async function updateCustomer(
 
 export async function softDeleteCustomer(adminUid: string, customerId: string): Promise<void> {
   await updateCustomer(adminUid, customerId, { isDeleted: true });
+}
+
+export async function bulkDeleteCustomers(
+  _adminUid: string,
+  customerIds: string[]
+): Promise<void> {
+  if (customerIds.length === 0) return;
+  await ensureLocalCacheLoaded();
+  const orgId = await getActiveOrganizationId();
+  const now = new Date().toISOString();
+
+  if (isSupabaseConfigured()) {
+    try {
+      const { error } = await (supabase.from('customers') as any)
+        .update({ is_deleted: true, updated_at: now })
+        .eq('organization_id', orgId)
+        .in('id', customerIds);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      localCustomersCache = localCustomersCache.filter((c) => !customerIds.includes(c.id));
+      await persistLocalCache();
+
+      await recordAuditLog({
+        organizationId: orgId,
+        action: 'DELETE',
+        entityType: 'CUSTOMER',
+        summary: `Group deleted ${customerIds.length} borrower records`,
+        metadata: { customerIds, count: customerIds.length },
+      });
+      return;
+    } catch (e: any) {
+      console.error('[Customers Supabase] bulkDeleteCustomers error:', e?.message || e);
+    }
+  }
+
+  localCustomersCache = localCustomersCache.filter((c) => !customerIds.includes(c.id));
+  await persistLocalCache();
+}
+
+/**
+ * Merge and import device phone contacts directly into borrower records.
+ * Updates matching phone numbers or adds new borrowers.
+ */
+export async function batchMergePhoneContacts(
+  _adminUid: string,
+  contactsToMerge: { name: string; phone: string }[]
+): Promise<{ added: number; updated: number }> {
+  await ensureLocalCacheLoaded();
+  const orgId = await getActiveOrganizationId();
+  const { data: userRes } = await supabase.auth.getUser();
+  const userId = userRes?.user?.id || null;
+  const now = new Date().toISOString();
+
+  let addedCount = 0;
+  let updatedCount = 0;
+
+  for (const c of contactsToMerge) {
+    const cleanPhone = c.phone.replace(/\D/g, '').slice(-10);
+    if (!cleanPhone || cleanPhone.length < 10) continue;
+    const name = c.name?.trim() || 'Borrower';
+
+    // Check if customer already exists by phone
+    const existingIndex = localCustomersCache.findIndex(
+      (item) => item.phone && item.phone.replace(/\D/g, '').slice(-10) === cleanPhone
+    );
+
+    if (existingIndex >= 0) {
+      const existing = localCustomersCache[existingIndex];
+      const updated: Customer = {
+        ...existing,
+        fullName: existing.fullName || name,
+        updatedAt: now,
+      };
+      localCustomersCache[existingIndex] = updated;
+      updatedCount++;
+
+      if (isSupabaseConfigured() && isValidUUID(existing.id)) {
+        try {
+          await (supabase.from('customers') as any)
+            .update({ full_name: updated.fullName, updated_at: now })
+            .eq('id', existing.id)
+            .eq('organization_id', orgId);
+        } catch {}
+      }
+    } else {
+      const newCustData: Omit<Customer, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'isDeleted'> = {
+        fullName: name,
+        phone: cleanPhone,
+        address: {
+          line1: 'Local Address',
+          city: 'Coimbatore',
+          state: 'Tamil Nadu',
+          pincode: '641001',
+        },
+        idProofs: [],
+        references: [],
+        tags: ['Phone Contact'],
+        status: 'Active',
+        totals: {
+          activeLoans: 0,
+          totalLent: 0,
+          totalOutstanding: 0,
+          totalPaid: 0,
+          overdueAmount: 0,
+        },
+      };
+
+      let insertedDomain: Customer | null = null;
+      if (isSupabaseConfigured()) {
+        try {
+          const rowData = customerDomainToRow(newCustData, orgId, userId);
+          const { data: inserted, error } = await (supabase.from('customers') as any)
+            .insert(rowData)
+            .select()
+            .single();
+
+          if (!error && inserted) {
+            insertedDomain = customerRowToDomain(inserted);
+          }
+        } catch {}
+      }
+
+      if (!insertedDomain) {
+        insertedDomain = {
+          ...newCustData,
+          id: `cust-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          createdAt: now,
+          updatedAt: now,
+          createdBy: userId || 'local_user',
+          isDeleted: false,
+        };
+      }
+
+      localCustomersCache.unshift(insertedDomain);
+      addedCount++;
+    }
+  }
+
+  await persistLocalCache();
+  return { added: addedCount, updated: updatedCount };
 }

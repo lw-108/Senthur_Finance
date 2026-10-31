@@ -9,6 +9,7 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  Vibration,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,16 +24,15 @@ import {
   Avatar,
   EmptyState,
   SkeletonLoader,
-  Badge,
   useToast,
+  ConfirmDialog,
 } from '@/components/ui';
-import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { radii } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
 import { useTheme } from '@/store/useThemeStore';
 import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
-import { useCustomers, useSeedCustomers } from '@/features/customers/hooks';
+import { useCustomers, useBulkDeleteCustomers } from '@/features/customers/hooks';
 import { Customer } from '@/features/customers/types';
 import { formatIndianCurrency } from '@/utils/formatters';
 import { openWhatsApp } from '@/utils/whatsapp';
@@ -46,18 +46,22 @@ export default function CustomersScreen() {
   const router = useRouter();
   const { colors: dynamicColors, isDark } = useTheme();
   const { business } = useBusinessSettingsStore();
-  const { showSuccess } = useToast();
+  const { showSuccess, showError } = useToast();
 
   const [search, setSearch] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<FilterType>('ALL');
   const [sortBy, setSortBy] = useState<SortOption>('name');
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+
+  const isSelectionMode = selectedIds.size > 0;
 
   const { data: rawCustomers, isLoading, refetch, isRefetching } = useCustomers({
     sortBy: 'name',
   });
 
-  const seedMutation = useSeedCustomers();
+  const bulkDeleteMutation = useBulkDeleteCustomers();
   const { setField, resetDraft } = useCustomerWizardDraft();
 
   const handleSelectPhoneContact = (contact: { name: string; phone: string }) => {
@@ -73,12 +77,6 @@ export default function CustomersScreen() {
 
   const handleWhatsApp = (phone: string, name: string) => {
     openWhatsApp(phone, `Hello ${name}, greetings from ${business.businessName || 'Senthur Finance'}.`);
-  };
-
-  const handleLoadDemoData = async () => {
-    await seedMutation.mutateAsync();
-    showSuccess('Loaded 25 demo borrowers with active loans & balances');
-    refetch();
   };
 
   // Compute live aggregates across all customers
@@ -162,6 +160,62 @@ export default function CustomersScreen() {
 
     return list;
   }, [rawCustomers, search, selectedFilter, sortBy]);
+
+  const handleLongPress = (id: string) => {
+    try {
+      Vibration.vibrate(40);
+    } catch {}
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleCardPress = (id: string) => {
+    if (isSelectionMode) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return next;
+      });
+    } else {
+      router.push(`/customers/${id}` as any);
+    }
+  };
+
+  const handleCancelSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.size === filteredCustomers.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCustomers.map((c) => c.id)));
+    }
+  };
+
+  const handleConfirmGroupDelete = async () => {
+    const idsToDelete = Array.from(selectedIds);
+    setDeleteConfirmVisible(false);
+    try {
+      await bulkDeleteMutation.mutateAsync(idsToDelete);
+      showSuccess(`Deleted ${idsToDelete.length} borrower${idsToDelete.length !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      refetch();
+    } catch {
+      showError('Failed to delete selected borrowers');
+    }
+  };
 
   // List header component with KPI metric cards & active result counts
   const renderListHeader = () => {
@@ -268,87 +322,115 @@ export default function CustomersScreen() {
     const overdueFormatted = formatIndianCurrency(item.totals?.overdueAmount || 0, {
       isMinorUnit: true,
     }).formatted;
+    const isSelected = selectedIds.has(item.id);
 
     return (
-      <View
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => handleCardPress(item.id)}
+        onLongPress={() => handleLongPress(item.id)}
+        delayLongPress={280}
         style={[
           styles.customerCard,
           shadows.soft,
           {
-            backgroundColor: dynamicColors.surface,
-            borderColor: hasOverdue ? `${dynamicColors.danger}40` : dynamicColors.boxBorder,
-            borderWidth: 1,
+            backgroundColor: isSelected
+              ? isDark
+                ? 'rgba(239, 68, 68, 0.16)'
+                : '#FEF2F2'
+              : dynamicColors.surface,
+            borderColor: isSelected
+              ? dynamicColors.danger
+              : hasOverdue
+                ? `${dynamicColors.danger}40`
+                : dynamicColors.boxBorder,
+            borderWidth: isSelected ? 2 : 1,
           },
         ]}
       >
-        <ListRow
-          title={item.fullName}
-          subtitle={`+91 ${item.phone} • ${item.address.city}`}
-          metaText={`${item.totals.activeLoans} Active Loan${item.totals.activeLoans !== 1 ? 's' : ''} • Score ${item.creditScoreInternal || 75}`}
-          leftNode={
-            <Avatar
-              uri={item.photoUrl}
-              name={item.fullName}
-              size={46}
-              borderColor={hasOverdue ? dynamicColors.danger : dynamicColors.primary}
-              backgroundColor={hasOverdue ? dynamicColors.dangerLight : dynamicColors.primaryLight}
-              textColor={hasOverdue ? dynamicColors.danger : dynamicColors.primaryDark}
-              style={styles.avatarMargin}
+        <View style={styles.cardHeaderRow}>
+          {isSelectionMode && (
+            <View style={styles.selectionCheckboxWrap}>
+              <Ionicons
+                name={isSelected ? 'checkbox' : 'square-outline'}
+                size={22}
+                color={isSelected ? dynamicColors.danger : dynamicColors.textTertiary}
+              />
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <ListRow
+              title={item.fullName}
+              subtitle={`+91 ${item.phone} • ${item.address.city}`}
+              metaText={`${item.totals.activeLoans} Active Loan${item.totals.activeLoans !== 1 ? 's' : ''} • Score ${item.creditScoreInternal || 75}`}
+              leftNode={
+                <Avatar
+                  uri={item.photoUrl}
+                  name={item.fullName}
+                  size={46}
+                  borderColor={isSelected ? dynamicColors.danger : hasOverdue ? dynamicColors.danger : dynamicColors.primary}
+                  backgroundColor={hasOverdue ? dynamicColors.dangerLight : dynamicColors.primaryLight}
+                  textColor={hasOverdue ? dynamicColors.danger : dynamicColors.primaryDark}
+                  style={styles.avatarMargin}
+                />
+              }
+              rightAmount={outstandingFormatted}
+              rightAmountType={hasOverdue ? 'negative' : 'neutral'}
+              rightSubtext={hasOverdue ? `OVERDUE ${overdueFormatted}` : 'Balance'}
+              showChevron={!isSelectionMode}
+              onPress={() => handleCardPress(item.id)}
             />
-          }
-          rightAmount={outstandingFormatted}
-          rightAmountType={hasOverdue ? 'negative' : 'neutral'}
-          rightSubtext={hasOverdue ? `OVERDUE ${overdueFormatted}` : 'Balance'}
-          showChevron
-          onPress={() => router.push(`/customers/${item.id}` as any)}
-        />
-
-        {/* Quick action bar at bottom of card */}
-        <View
-          style={[
-            styles.quickBar,
-            {
-              borderTopColor: isDark ? 'rgba(255, 255, 255, 0.08)' : dynamicColors.border,
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={styles.quickBarBtn}
-            onPress={() => handleCall(item.phone)}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            <Ionicons name="call-outline" size={15} color={dynamicColors.ink} />
-            <Text style={[styles.quickBarText, { color: dynamicColors.ink }]}>Call</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.quickBarBtn}
-            onPress={() => handleWhatsApp(item.phone, item.fullName)}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            <Ionicons name="logo-whatsapp" size={15} color={dynamicColors.success} />
-            <Text style={[styles.quickBarText, { color: dynamicColors.success }]}>WhatsApp</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.quickBarBtn}
-            onPress={() => router.push(`/loans/new?customerId=${item.id}` as any)}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            <Ionicons name="add-circle-outline" size={15} color={dynamicColors.primary} />
-            <Text style={[styles.quickBarText, { color: dynamicColors.primary }]}>New Loan</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.quickBarBtn}
-            onPress={() => router.push(`/customers/${item.id}` as any)}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            <Ionicons name="eye-outline" size={15} color={dynamicColors.textSecondary} />
-            <Text style={[styles.quickBarText, { color: dynamicColors.textSecondary }]}>Profile</Text>
-          </TouchableOpacity>
+          </View>
         </View>
-      </View>
+
+        {/* Quick action bar at bottom of card - hidden during selection mode to prevent mis-clicks */}
+        {!isSelectionMode && (
+          <View
+            style={[
+              styles.quickBar,
+              {
+                borderTopColor: isDark ? 'rgba(255, 255, 255, 0.08)' : dynamicColors.border,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.quickBarBtn}
+              onPress={() => handleCall(item.phone)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="call-outline" size={15} color={dynamicColors.ink} />
+              <Text style={[styles.quickBarText, { color: dynamicColors.ink }]}>Call</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickBarBtn}
+              onPress={() => handleWhatsApp(item.phone, item.fullName)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="logo-whatsapp" size={15} color={dynamicColors.success} />
+              <Text style={[styles.quickBarText, { color: dynamicColors.success }]}>WhatsApp</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickBarBtn}
+              onPress={() => router.push(`/loans/new?customerId=${item.id}` as any)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="add-circle-outline" size={15} color={dynamicColors.primary} />
+              <Text style={[styles.quickBarText, { color: dynamicColors.primary }]}>New Loan</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickBarBtn}
+              onPress={() => router.push(`/customers/${item.id}` as any)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="eye-outline" size={15} color={dynamicColors.textSecondary} />
+              <Text style={[styles.quickBarText, { color: dynamicColors.textSecondary }]}>Profile</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </TouchableOpacity>
     );
   };
 
@@ -375,7 +457,7 @@ export default function CustomersScreen() {
         <EmptyState
           iconName="people-outline"
           title="No Borrowers Found"
-          description="Add your first borrower, merge from phone contacts, or load realistic demo data to explore all features."
+          description="Add your first borrower or merge from phone contacts to get started."
           actionTitle="Add New Customer"
           onAction={() => {
             resetDraft();
@@ -398,23 +480,6 @@ export default function CustomersScreen() {
             <Ionicons name="person-add-outline" size={16} color={dynamicColors.primary} />
             <Text style={[styles.emptyActionBtnText, { color: dynamicColors.primary }]}>
               Merge from Contacts
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.emptyActionBtn,
-              {
-                backgroundColor: isDark ? `${dynamicColors.success}18` : dynamicColors.successLight,
-                borderColor: `${dynamicColors.success}40`,
-              },
-            ]}
-            onPress={handleLoadDemoData}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="sparkles-outline" size={16} color={dynamicColors.success} />
-            <Text style={[styles.emptyActionBtnText, { color: dynamicColors.success }]}>
-              Load 25 Demo Borrowers
             </Text>
           </TouchableOpacity>
         </View>
@@ -462,29 +527,80 @@ export default function CustomersScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={handleLoadDemoData}
+              onPress={() => refetch()}
               style={[
                 styles.topNavBtn,
                 {
-                  backgroundColor: isDark ? `${dynamicColors.success}18` : dynamicColors.successLight,
-                  borderColor: `${dynamicColors.success}40`,
+                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : dynamicColors.surfaceMuted,
+                  borderColor: dynamicColors.border,
                 },
               ]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
-              accessibilityLabel="Refresh demo borrowers"
+              accessibilityLabel="Refresh borrowers"
             >
-              <Ionicons name="refresh-outline" size={18} color={dynamicColors.success} />
+              <Ionicons name="refresh-outline" size={18} color={dynamicColors.ink} />
             </TouchableOpacity>
           </View>
         }
       />
 
-      {/* Screen Title & Subtitle */}
-      <DisplayTitle
-        title="Borrowers"
-        subtitle="Manage customer KYC, loans & guarantees"
-      />
+      {/* Screen Title & Subtitle OR Selection Bar */}
+      {isSelectionMode ? (
+        <View
+          style={[
+            styles.selectionHeaderBar,
+            {
+              backgroundColor: isDark ? '#2D1B1B' : '#FEF2F2',
+              borderColor: `${dynamicColors.danger}40`,
+            },
+          ]}
+        >
+          <View style={styles.selectionBarLeft}>
+            <TouchableOpacity
+              onPress={handleCancelSelection}
+              style={[styles.selectionCloseBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#FEE2E2' }]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close" size={20} color={dynamicColors.danger} />
+            </TouchableOpacity>
+            <View>
+              <Text style={[styles.selectionCountTitle, { color: dynamicColors.danger }]}>
+                {selectedIds.size} Selected
+              </Text>
+              <Text style={[styles.selectionCountSub, { color: dynamicColors.textSecondary }]}>
+                Tap items to select or deselect
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.selectionBarRight}>
+            <TouchableOpacity
+              onPress={handleToggleSelectAll}
+              style={[styles.selectAllBtn, { borderColor: dynamicColors.danger }]}
+            >
+              <Text style={[styles.selectAllBtnText, { color: dynamicColors.danger }]}>
+                {selectedIds.size === filteredCustomers.length ? 'Deselect All' : 'Select All'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setDeleteConfirmVisible(true)}
+              style={[styles.deleteGroupBtn, { backgroundColor: dynamicColors.danger }]}
+            >
+              <Ionicons name="trash" size={15} color="#FFFFFF" />
+              <Text style={styles.deleteGroupBtnText}>
+                Delete ({selectedIds.size})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <DisplayTitle
+          title="Borrowers"
+          subtitle="Manage customer KYC, loans & guarantees"
+        />
+      )}
 
       {/* Sticky Search Bar */}
       <Input
@@ -565,15 +681,17 @@ export default function CustomersScreen() {
         />
       )}
 
-      {/* FAB: Floating Add Customer Button */}
-      <FAB
-        onPress={() => {
-          resetDraft();
-          router.push('/customers/new' as any);
-        }}
-        iconName="person-add"
-        accessibilityLabel="Add Customer"
-      />
+      {/* FAB: Floating Add Customer Button (hidden in selection mode) */}
+      {!isSelectionMode && (
+        <FAB
+          onPress={() => {
+            resetDraft();
+            router.push('/customers/new' as any);
+          }}
+          iconName="person-add"
+          accessibilityLabel="Add Customer"
+        />
+      )}
 
       {/* Phone Contact Picker Modal */}
       <ContactPickerModal
@@ -581,11 +699,93 @@ export default function CustomersScreen() {
         onClose={() => setContactPickerOpen(false)}
         onSelectContact={handleSelectPhoneContact}
       />
+
+      {/* Group Delete Confirmation Dialog */}
+      <ConfirmDialog
+        visible={deleteConfirmVisible}
+        title={`Delete ${selectedIds.size} Borrower${selectedIds.size !== 1 ? 's' : ''}`}
+        message={`Are you sure you want to delete ${selectedIds.size} selected borrower${selectedIds.size !== 1 ? 's' : ''}? This will remove them from your active records.`}
+        confirmLabel={`Delete (${selectedIds.size})`}
+        cancelLabel="Cancel"
+        isDestructive
+        icon="trash-outline"
+        onConfirm={handleConfirmGroupDelete}
+        onCancel={() => setDeleteConfirmVisible(false)}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectionCheckboxWrap: {
+    paddingRight: 8,
+    paddingLeft: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectionHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  selectionBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  selectionCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectionCountTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: typography.fontHeadline,
+  },
+  selectionCountSub: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  selectionBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectAllBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  selectAllBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  deleteGroupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  deleteGroupBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   screenContainer: {
     flex: 1,
     minHeight: 0,

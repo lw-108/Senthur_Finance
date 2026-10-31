@@ -91,8 +91,8 @@ export function PaymentReceiptModal({
     payment,
     loan: effectiveLoan,
     businessName: business.businessName || 'SENTHUR FINANCE',
-    businessAddress: business.address || 'Gandhipuram, Coimbatore',
-    businessPhone: business.phone || '+91 98765 00000',
+    businessAddress: business.address || (business.city ? `${business.city}, ${business.state}` : ''),
+    businessPhone: business.phone || '',
   };
 
   const handleSharePdf = async () => {

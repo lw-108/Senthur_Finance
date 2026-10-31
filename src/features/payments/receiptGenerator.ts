@@ -17,8 +17,8 @@ export function generateReceiptHtml(data: ReceiptData): string {
     payment,
     loan,
     businessName = 'SENTHUR FINANCE',
-    businessAddress = 'Crosscut Road, Gandhipuram, Coimbatore - 641012',
-    businessPhone = '+91 98765 00000',
+    businessAddress = '',
+    businessPhone = '',
   } = data;
 
   const totalAmountFormatted = formatIndianCurrency(payment.amount, { isMinorUnit: true }).formatted;

@@ -6,8 +6,8 @@ import {
   createCustomer,
   updateCustomer,
   softDeleteCustomer,
-  checkDuplicatePhone,
-  seedDemoCustomers,
+  bulkDeleteCustomers,
+  batchMergePhoneContacts,
 } from './api';
 import { Customer, CustomerFilterParams } from './types';
 import { AUDIT_LOGS_QUERY_KEY } from '@/features/audit/hooks';
@@ -74,17 +74,30 @@ export function useDeleteCustomer() {
   });
 }
 
-export function useSeedCustomers() {
+export function useBulkDeleteCustomers() {
   const adminUid = useAuthStore((s) => s.adminUid);
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async () => {
-      seedDemoCustomers(adminUid);
-      return true;
-    },
+    mutationFn: (customerIds: string[]) => bulkDeleteCustomers(adminUid, customerIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CUSTOMERS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [AUDIT_LOGS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+    },
+  });
+}
+
+export function useBatchMergeContacts() {
+  const adminUid = useAuthStore((s) => s.adminUid);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (contacts: { name: string; phone: string }[]) =>
+      batchMergePhoneContacts(adminUid, contacts),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CUSTOMERS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [AUDIT_LOGS_QUERY_KEY] });
     },
   });
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Screen,
@@ -77,13 +77,7 @@ export default function NewCustomerScreen() {
 
   const validateStep2 = (): boolean => {
     const errors: Record<string, string> = {};
-    if (!draft.address.line1 || draft.address.line1.trim().length < 2) {
-      errors.line1 = 'Address line 1 is required';
-    }
-    if (!draft.address.city || draft.address.city.trim().length < 2) {
-      errors.city = 'City is required';
-    }
-    if (!draft.address.pincode || draft.address.pincode.trim().length !== 6) {
+    if (draft.address.pincode && draft.address.pincode.trim().length > 0 && draft.address.pincode.trim().length !== 6) {
       errors.pincode = 'Enter valid 6-digit pincode';
     }
     setStepErrors(errors);
@@ -91,17 +85,14 @@ export default function NewCustomerScreen() {
   };
 
   const validateStep3 = (): boolean => {
-    const errors: Record<string, string> = {};
-    if (!draft.idProofs || draft.idProofs.length === 0) {
-      errors.idProof = 'Please provide at least one ID proof';
-    } else {
-      const primaryProof = draft.idProofs[0];
-      if (!primaryProof.number || primaryProof.number.trim().length < 4) {
-        errors.idProofNumber = 'ID number is required';
-      }
-    }
-    setStepErrors(errors);
-    return Object.keys(errors).length === 0;
+    // KYC proofs optional during initial creation
+    return true;
+  };
+
+  const handleQuickSaveFromStep1 = async () => {
+    const valid = await validateStep1();
+    if (!valid) return;
+    saveCustomer();
   };
 
   const nextStep = async () => {
@@ -132,8 +123,16 @@ export default function NewCustomerScreen() {
 
   const saveCustomer = async () => {
     try {
+      const cleanAddress = {
+        line1: draft.address.line1?.trim() || 'Main Road',
+        line2: draft.address.line2?.trim() || '',
+        city: draft.address.city?.trim() || 'Coimbatore',
+        state: draft.address.state?.trim() || 'Tamil Nadu',
+        pincode: draft.address.pincode?.trim() || '641001',
+      };
+
       await createCustomerMutation.mutateAsync({
-        fullName: draft.fullName,
+        fullName: draft.fullName.trim(),
         nickname: draft.nickname || undefined,
         phone: draft.phone.replace(/\D/g, '').slice(-10),
         altPhone: draft.altPhone || undefined,
@@ -141,11 +140,11 @@ export default function NewCustomerScreen() {
         occupation: draft.occupation || undefined,
         monthlyIncome: draft.monthlyIncome ? draft.monthlyIncome * 100 : undefined,
         photoUrl: draft.photoUrl || undefined,
-        address: draft.address,
-        idProofs: draft.idProofs,
-        references: draft.references,
+        address: cleanAddress,
+        idProofs: draft.idProofs || [],
+        references: draft.references || [],
         guarantor: draft.guarantor.name ? draft.guarantor : undefined,
-        tags: draft.tags,
+        tags: draft.tags?.length > 0 ? draft.tags : ['Borrower'],
         notes: draft.notes || undefined,
         rating: 5,
         creditScoreInternal: 80,
@@ -481,7 +480,19 @@ export default function NewCustomerScreen() {
           isTablet && styles.footerButtonsTablet,
         ]}
       >
-        {draft.currentStep > 1 && (
+        {draft.currentStep === 1 ? (
+          <PillButton
+            title="Quick Save"
+            iconName="checkmark"
+            iconPosition="left"
+            onPress={handleQuickSaveFromStep1}
+            loading={createCustomerMutation.isPending}
+            variant="secondary"
+            size={isSmallScreen ? 'sm' : 'md'}
+            style={styles.backBtn}
+            textStyle={isSmallScreen ? styles.btnTextSmall : undefined}
+          />
+        ) : (
           <PillButton
             title="Back"
             iconName="chevron-back"
@@ -496,7 +507,7 @@ export default function NewCustomerScreen() {
         <PillButton
           title={
             draft.currentStep === 1
-              ? 'Address'
+              ? 'Next: Address'
               : draft.currentStep === 2
               ? 'KYC Verification'
               : draft.currentStep === 3
@@ -511,7 +522,7 @@ export default function NewCustomerScreen() {
           loading={createCustomerMutation.isPending}
           variant="primary"
           size={isSmallScreen ? 'sm' : 'md'}
-          style={draft.currentStep === 1 ? styles.fullBtn : styles.continueBtn}
+          style={styles.continueBtn}
           textStyle={isSmallScreen ? styles.btnTextSmall : undefined}
         />
       </View>
