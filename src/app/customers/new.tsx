@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { openPhotoSourcePicker } from '@/utils/photoPicker';
 import {
   Screen,
   Header,
@@ -93,6 +95,22 @@ export default function NewCustomerScreen() {
     const valid = await validateStep1();
     if (!valid) return;
     saveCustomer();
+  };
+
+  const handlePickPhoto = () => {
+    openPhotoSourcePicker({
+      title: 'Borrower Profile Photo',
+      hasExistingPhoto: Boolean(draft.photoUrl),
+      onPhotoSelected: (avatarUri) => {
+        draft.setField('photoUrl', avatarUri);
+        showSuccess('Borrower photo attached');
+      },
+      onPhotoRemoved: () => {
+        draft.setField('photoUrl', '');
+        showSuccess('Borrower photo removed');
+      },
+      onError: showError,
+    });
   };
 
   const nextStep = async () => {
@@ -215,6 +233,32 @@ export default function NewCustomerScreen() {
               <Text style={[styles.warningText, { color: colors.warning }]}>{duplicateWarning}</Text>
             </View>
           )}
+
+          {/* Borrower Profile Photo Capture & Upload */}
+          <View style={styles.photoUploadSection}>
+            <TouchableOpacity
+              onPress={handlePickPhoto}
+              activeOpacity={0.8}
+              style={styles.avatarTouchable}
+              accessibilityRole="button"
+              accessibilityLabel="Upload borrower photo"
+            >
+              <Avatar
+                uri={draft.photoUrl}
+                name={draft.fullName || 'Borrower'}
+                size={76}
+                borderColor={colors.primary}
+                backgroundColor={colors.primaryLight}
+                textColor={colors.primaryDark}
+              />
+              <View style={[styles.avatarCameraBadge, { backgroundColor: colors.primaryDark, borderColor: colors.surface }]}>
+                <Ionicons name="camera" size={15} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+            <Text style={[styles.photoHelperText, { color: colors.textSecondary }]}>
+              {draft.photoUrl ? 'Tap photo to change or remove' : 'Tap to take borrower photo (Camera / Gallery)'}
+            </Text>
+          </View>
 
           <Input
             label="Full Legal Name *"
@@ -437,7 +481,7 @@ export default function NewCustomerScreen() {
 
           <Card variant="surface" style={[styles.reviewCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
             <View style={styles.reviewHeader}>
-              <Avatar name={draft.fullName} size={54} />
+              <Avatar uri={draft.photoUrl} name={draft.fullName} size={54} />
               <View style={styles.reviewInfo}>
                 <Text style={[styles.reviewName, { color: colors.ink }]}>{draft.fullName}</Text>
                 <Text style={[styles.reviewPhone, { color: colors.textSecondary }]}>+91 {draft.phone}</Text>
@@ -550,6 +594,31 @@ const styles = StyleSheet.create({
   warningText: {
     ...typography.caption,
     color: colors.warning,
+    fontWeight: '600',
+  },
+  photoUploadSection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 14,
+  },
+  avatarTouchable: {
+    position: 'relative',
+    alignSelf: 'center',
+  },
+  avatarCameraBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoHelperText: {
+    ...typography.caption,
+    marginTop: 8,
     fontWeight: '600',
   },
   reviewCard: {

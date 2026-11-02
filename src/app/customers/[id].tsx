@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { openPhotoSourcePicker } from '@/utils/photoPicker';
 import {
   Screen,
   Header,
@@ -212,84 +213,42 @@ export default function CustomerDetailScreen() {
     }
   };
 
-  // Borrower Photo Picker with Direct Selection (No Cropping to prevent Android activity locks)
-  const pickPhotoFromSource = async (source: 'camera' | 'library') => {
+  const handleRemovePhoto = async () => {
     if (!customer) return;
     try {
-      let res: ImagePicker.ImagePickerResult;
-
-      if (source === 'camera') {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          showError('Camera permission is required to capture borrower photo');
-          return;
-        }
-        res = await ImagePicker.launchCameraAsync({
-          allowsEditing: false,
-          quality: 0.8,
-        });
-      } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          showError('Photo library permission is required to select borrower photo');
-          return;
-        }
-        res = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: false,
-          quality: 0.8,
-        });
-      }
-
-      if (!res.canceled && res.assets && res.assets.length > 0) {
-        const asset = res.assets[0];
-        let avatarUri = asset.uri;
-
-        // Resize and optimize down to a clean 300x300 JPEG (~20KB) to ensure reliable database sync
-        try {
-          const manip = await ImageManipulator.manipulateAsync(
-            asset.uri,
-            [{ resize: { width: 300, height: 300 } }],
-            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-          );
-          if (manip.base64) {
-            avatarUri = `data:image/jpeg;base64,${manip.base64}`;
-          } else if (manip.uri) {
-            avatarUri = manip.uri;
-          }
-        } catch (manipErr) {
-          console.warn('[Customer Photo] Optimization notice:', manipErr);
-        }
-
-        await updateMutation.mutateAsync({
-          customerId: customer.id,
-          updates: { photoUrl: avatarUri },
-        });
-        showSuccess('Borrower photo updated');
-        refetch();
-      }
-    } catch (err) {
-      console.error('[Customer Photo] Update error:', err);
-      showError('Failed to update borrower photo');
+      await updateMutation.mutateAsync({
+        customerId: customer.id,
+        updates: { photoUrl: '' },
+      });
+      showSuccess('Borrower photo removed');
+      refetch();
+    } catch {
+      showError('Failed to remove borrower photo');
     }
   };
 
   const handlePickPhoto = () => {
-    if (Platform.OS === 'web') {
-      pickPhotoFromSource('library');
-      return;
-    }
+    if (!customer) return;
 
-    Alert.alert(
-      'Borrower Photo',
-      'Select an option to update photo:',
-      [
-        { text: 'Take Photo', onPress: () => pickPhotoFromSource('camera') },
-        { text: 'Choose from Gallery', onPress: () => pickPhotoFromSource('library') },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
+    openPhotoSourcePicker({
+      title: 'Borrower Photo',
+      hasExistingPhoto: Boolean(customer.photoUrl),
+      onPhotoSelected: async (avatarUri) => {
+        try {
+          await updateMutation.mutateAsync({
+            customerId: customer.id,
+            updates: { photoUrl: avatarUri },
+          });
+          showSuccess('Borrower photo updated');
+          refetch();
+        } catch (err) {
+          console.error('[Customer Photo] Update error:', err);
+          showError('Failed to update borrower photo');
+        }
+      },
+      onPhotoRemoved: handleRemovePhoto,
+      onError: showError,
+    });
   };
 
   const handleCall = () => {

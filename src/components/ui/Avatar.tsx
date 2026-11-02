@@ -38,6 +38,12 @@ export function Avatar({
     return str.slice(0, 2).toUpperCase();
   };
 
+  const [imageError, setImageError] = React.useState(false);
+
+  React.useEffect(() => {
+    setImageError(false);
+  }, [uri]);
+
   const borderWidth = showBorder ? 2 : 0;
   const containerStyle = {
     width: size,
@@ -48,7 +54,7 @@ export function Avatar({
     borderColor: effectiveBorderColor,
   };
 
-  if (uri) {
+  if (uri && !imageError) {
     const imageSize = size - borderWidth * 2;
     return (
       <View style={[styles.container, containerStyle, style]}>
@@ -56,6 +62,7 @@ export function Avatar({
           source={{ uri }}
           style={[styles.image, { width: imageSize, height: imageSize, borderRadius: imageSize / 2 }]}
           resizeMode="cover"
+          onError={() => setImageError(true)}
         />
       </View>
     );

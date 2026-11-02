@@ -434,7 +434,7 @@ export default function CustomersScreen() {
     );
   };
 
-  // Render empty state with seed data & add buttons
+  // Render empty state with borrower add buttons
   const renderEmptyState = () => {
     if (isLoading) return null;
 

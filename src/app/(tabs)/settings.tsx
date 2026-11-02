@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { openPhotoSourcePicker } from '@/utils/photoPicker';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import {
   Screen,
@@ -148,82 +149,24 @@ export default function SettingsScreen() {
     setCurrencyModalVisible(true);
   };
 
-  // Avatar Image Picker with Direct Selection (No Cropping to prevent Android activity locks)
-  const pickAvatarFromSource = async (source: 'camera' | 'library') => {
-    try {
-      let res: ImagePicker.ImagePickerResult;
-
-      if (source === 'camera') {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          showError('Camera permission is required to take a profile photo');
-          return;
-        }
-        res = await ImagePicker.launchCameraAsync({
-          allowsEditing: false,
-          quality: 0.8,
-        });
-      } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          showError('Photo library permission is required to select a photo');
-          return;
-        }
-        res = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: false,
-          quality: 0.8,
-        });
-      }
-
-      if (!res.canceled && res.assets && res.assets.length > 0) {
-        const asset = res.assets[0];
-        let avatarUri = asset.uri;
-
-        // Resize and optimize down to a crisp, lightweight 300x300 JPEG (~20KB)
-        // This avoids Android SQLite 2MB CursorWindow crashes and memory locks
-        try {
-          const manip = await ImageManipulator.manipulateAsync(
-            asset.uri,
-            [{ resize: { width: 300, height: 300 } }],
-            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-          );
-          if (manip.base64) {
-            avatarUri = `data:image/jpeg;base64,${manip.base64}`;
-          } else if (manip.uri) {
-            avatarUri = manip.uri;
-          }
-        } catch (manipErr) {
-          console.warn('[Avatar] Optimization notice:', manipErr);
-        }
-
-        await setPermanentAvatar(avatarUri);
-        await updateAvatar(avatarUri);
-        await updatePhotoURL(avatarUri);
-        showSuccess('Profile photo updated successfully');
-      }
-    } catch (err) {
-      console.error('[Avatar] Pick error:', err);
-      showError('Failed to upload profile photo');
-    }
-  };
-
   const handlePickAvatar = () => {
-    if (Platform.OS === 'web') {
-      pickAvatarFromSource('library');
-      return;
-    }
-
-    Alert.alert(
-      'Profile Photo',
-      'Select an option to update your photo:',
-      [
-        { text: 'Take Photo', onPress: () => pickAvatarFromSource('camera') },
-        { text: 'Choose from Gallery', onPress: () => pickAvatarFromSource('library') },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
+    openPhotoSourcePicker({
+      title: 'Admin Profile Photo',
+      hasExistingPhoto: Boolean(business.avatarUrl || storedUser?.photoURL || permanentAvatar),
+      onPhotoSelected: async (avatarUri) => {
+        try {
+          await setPermanentAvatar(avatarUri);
+          await updateAvatar(avatarUri);
+          await updatePhotoURL(avatarUri);
+          showSuccess('Profile photo updated successfully');
+        } catch (err) {
+          console.error('[Avatar] Update error:', err);
+          showError('Failed to save profile photo');
+        }
+      },
+      onPhotoRemoved: handleRemoveAvatar,
+      onError: showError,
+    });
   };
 
   const handleRemoveAvatar = async () => {

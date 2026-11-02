@@ -575,7 +575,7 @@ export default function NewLoanScreen() {
             iconPosition="left"
             onPress={prev}
             variant="secondary"
-            size={isSmallScreen ? 'sm' : 'md'}
+            size={isTablet ? 'md' : 'sm'}
             style={styles.backBtn}
             textStyle={isSmallScreen ? styles.btnTextSmall : undefined}
           />
@@ -590,14 +590,14 @@ export default function NewLoanScreen() {
               ? 'Security'
               : draft.currentStep === 4
               ? 'Confirm & Save'
-              : 'Confirm & Give Loan'
+              : 'Give Loan'
           }
           iconName={draft.currentStep === 5 ? 'checkmark-circle' : 'arrow-forward'}
           iconPosition="right"
           onPress={next}
           loading={createLoanMutation.isPending}
           variant="primary"
-          size={isSmallScreen ? 'sm' : 'md'}
+          size={isTablet ? 'md' : 'sm'}
           style={draft.currentStep === 1 ? styles.fullBtn : styles.continueBtn}
           textStyle={isSmallScreen ? styles.btnTextSmall : undefined}
         />
@@ -656,7 +656,7 @@ const styles = StyleSheet.create({
   footerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     marginTop: 24,
     marginBottom: 44,
     width: '100%',
@@ -666,19 +666,25 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   backBtn: {
-    flex: 0.38,
+    flex: 1,
+    minWidth: 0,
     minHeight: 46,
+    maxWidth: 110,
+    paddingHorizontal: 12,
   },
   continueBtn: {
-    flex: 0.62,
+    flex: 3,
+    minWidth: 0,
     minHeight: 46,
+    paddingHorizontal: 12,
   },
   fullBtn: {
-    width: '100%',
+    flex: 1,
+    minWidth: 0,
     minHeight: 46,
   },
   btnTextSmall: {
-    fontSize: 13,
-    letterSpacing: 0.5,
+    fontSize: 12,
+    letterSpacing: 0.3,
   },
 });

@@ -41,9 +41,12 @@ export function KYCDocumentPicker({
     try {
       const manipResult = await ImageManipulator.manipulateAsync(
         uri,
-        [{ resize: { width: 1600 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+        [{ resize: { width: 1200 } }],
+        { compress: 0.65, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       );
+      if (manipResult.base64 && manipResult.base64.length > 0) {
+        return `data:image/jpeg;base64,${manipResult.base64}`;
+      }
       return manipResult.uri;
     } catch {
       return uri;

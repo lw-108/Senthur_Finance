@@ -110,7 +110,19 @@ export async function getPermanentAvatarAsync(): Promise<string> {
  * Save profile avatar permanently into local storage lifelong
  */
 export async function setPermanentAvatar(avatarUri: string): Promise<void> {
-  if (!avatarUri || avatarUri.trim().length === 0) return;
+  if (!avatarUri || avatarUri.trim().length === 0) {
+    memoryAvatarCache = '';
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.removeItem(PERMANENT_AVATAR_KEY);
+      } catch {}
+    }
+    try {
+      await secureStorage.removeItem(PERMANENT_AVATAR_KEY);
+    } catch {}
+    notifyListeners('');
+    return;
+  }
 
   memoryAvatarCache = avatarUri;
 
