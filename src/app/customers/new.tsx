@@ -13,6 +13,7 @@ import {
   PillButton,
   Card,
   Avatar,
+  Badge,
   useToast,
 } from '@/components/ui';
 import { colors } from '@/theme/colors';
@@ -705,15 +706,15 @@ export default function NewCustomerScreen() {
                   <View style={{ flexDirection: 'row', gap: 4, marginTop: 3 }}>
                     {p.frontUrl ? (
                       <Badge
-                        variant="subtle"
-                        status="info"
+                        size="sm"
+                        status="ACTIVE"
                         label={isPdfDocument(p.frontUrl) ? 'Front: PDF' : 'Front: Photo'}
                       />
                     ) : null}
                     {p.backUrl ? (
                       <Badge
-                        variant="subtle"
-                        status="info"
+                        size="sm"
+                        status="ACTIVE"
                         label={isPdfDocument(p.backUrl) ? 'Back: PDF' : 'Back: Photo'}
                       />
                     ) : null}

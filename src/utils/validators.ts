@@ -336,6 +336,7 @@ export function validateKYCDocument(
   number: string | undefined | null,
   options: { required?: boolean } = {}
 ): ValidationResult {
+  const { required = true } = options;
   switch (type) {
     case 'Aadhaar':
       return validateAadhaar(number, options);
@@ -348,7 +349,7 @@ export function validateKYCDocument(
     case 'Passport':
       return validatePassport(number, options);
     default:
-      if (options.required && (!number || number.trim().length === 0)) {
+      if (required && (!number || number.trim().length === 0)) {
         return { isValid: false, error: 'Document number is required' };
       }
       return { isValid: true };
@@ -370,6 +371,8 @@ export function sanitizeKYCDocument(type: string, val: string): string {
       return sanitizeDrivingLicense(val);
     case 'Passport':
       return sanitizePassport(val);
+    case 'RationCard':
+      return val.toUpperCase().trim();
     default:
       return val.trim();
   }

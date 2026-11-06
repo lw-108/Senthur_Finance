@@ -22,17 +22,9 @@ import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { radii } from '@/theme/spacing';
 import { useTheme } from '@/store/useThemeStore';
+import { isPdfDocument, isImageDocument, getDocumentDisplayName } from '@/utils/documentUtils';
 
-export function isPdfDocument(uri?: string): boolean {
-  if (!uri) return false;
-  const lower = uri.toLowerCase();
-  return (
-    lower.startsWith('data:application/pdf') ||
-    lower.endsWith('.pdf') ||
-    lower.includes('application/pdf') ||
-    lower.includes('.pdf?')
-  );
-}
+export { isPdfDocument, isImageDocument, getDocumentDisplayName };
 
 export async function openOrShareDocument(uri: string, title: string = 'Document') {
   try {
@@ -58,8 +50,9 @@ export async function openOrShareDocument(uri: string, title: string = 'Document
     // On native iOS / Android:
     if (isPdf && uri.startsWith('data:application/pdf;base64,')) {
       const base64Data = uri.replace('data:application/pdf;base64,', '');
-      const tempPath = `${FileSystem.cacheDirectory}${title.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
-      await FileSystem.writeAsStringAsync(tempPath, base64Data, {
+      const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
+      const tempPath = `${cacheDir}${title.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
+      await (FileSystem as any).writeAsStringAsync(tempPath, base64Data, {
         encoding: 'base64',
       });
       if (await Sharing.isAvailableAsync()) {
@@ -195,6 +188,7 @@ export function KYCDocumentPicker({
 }: KYCDocumentPickerProps) {
   const { colors: dynamicColors } = useTheme();
   const [loadingSide, setLoadingSide] = useState<'front' | 'back' | null>(null);
+  const [pickSourceSide, setPickSourceSide] = useState<'front' | 'back' | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string>('Proof Document');
 
@@ -279,7 +273,7 @@ export function KYCDocumentPicker({
         if (isPdf) {
           try {
             if (Platform.OS !== 'web') {
-              const b64 = await FileSystem.readAsStringAsync(asset.uri, {
+              const b64 = await (FileSystem as any).readAsStringAsync(asset.uri, {
                 encoding: 'base64',
               });
               if (b64 && b64.length > 0) {
@@ -311,22 +305,7 @@ export function KYCDocumentPicker({
 
   const showPickOptions = (side: 'front' | 'back') => {
     if (disabled) return;
-    const sideTitle = side === 'front' ? 'Front Side' : 'Back Side';
-    Alert.alert(`Upload ${label} (${sideTitle})`, 'Choose source for customer proof:', [
-      {
-        text: '📸 Capture Camera Photo',
-        onPress: () => pickImage(side, 'camera'),
-      },
-      {
-        text: '🖼️ Choose from Gallery',
-        onPress: () => pickImage(side, 'library'),
-      },
-      {
-        text: '📄 Upload PDF Document',
-        onPress: () => pickDocument(side),
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    setPickSourceSide(side);
   };
 
   const handleOpenPreview = (uri: string, side: 'front' | 'back') => {
@@ -482,6 +461,112 @@ export function KYCDocumentPicker({
         {hasBackSide && renderSideCard('back', backUri, backName, false)}
       </View>
 
+      {/* Pick Source Modal (Camera / Gallery / PDF) */}
+      <Modal
+        visible={pickSourceSide !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickSourceSide(null)}
+      >
+        <TouchableOpacity
+          style={styles.sourceModalOverlay}
+          activeOpacity={1}
+          onPress={() => setPickSourceSide(null)}
+        >
+          <View
+            style={[
+              styles.sourceModalCard,
+              { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border },
+            ]}
+          >
+            <View style={styles.sourceModalHeader}>
+              <View style={[styles.sourceIconBadge, { backgroundColor: dynamicColors.primarySoft }]}>
+                <Ionicons name="document-attach" size={22} color={dynamicColors.primaryDark} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sourceModalTitle, { color: dynamicColors.ink }]}>
+                  Upload {label}
+                </Text>
+                <Text style={[styles.sourceModalSubtitle, { color: dynamicColors.textSecondary }]}>
+                  {pickSourceSide === 'front' ? 'Front Side Proof' : 'Back Side Proof'} • Choose format
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setPickSourceSide(null)} style={{ padding: 4 }}>
+                <Ionicons name="close" size={22} color={dynamicColors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.sourceOptionsList}>
+              <TouchableOpacity
+                style={[styles.sourceOptionBtn, { backgroundColor: dynamicColors.surfaceSubtle }]}
+                onPress={() => {
+                  const side = pickSourceSide;
+                  setPickSourceSide(null);
+                  if (side) pickImage(side, 'camera');
+                }}
+              >
+                <View style={[styles.sourceOptionIconWrap, { backgroundColor: 'rgba(239, 68, 68, 0.12)' }]}>
+                  <Ionicons name="camera" size={20} color="#EF4444" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.sourceOptionTitle, { color: dynamicColors.ink }]}>
+                    Capture Camera Photo
+                  </Text>
+                  <Text style={[styles.sourceOptionDesc, { color: dynamicColors.textSecondary }]}>
+                    Snap ID card photo directly with camera
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={dynamicColors.textMuted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.sourceOptionBtn, { backgroundColor: dynamicColors.surfaceSubtle }]}
+                onPress={() => {
+                  const side = pickSourceSide;
+                  setPickSourceSide(null);
+                  if (side) pickImage(side, 'library');
+                }}
+              >
+                <View style={[styles.sourceOptionIconWrap, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
+                  <Ionicons name="images" size={20} color="#3B82F6" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.sourceOptionTitle, { color: dynamicColors.ink }]}>
+                    Choose from Gallery
+                  </Text>
+                  <Text style={[styles.sourceOptionDesc, { color: dynamicColors.textSecondary }]}>
+                    Upload photo or scanned image from gallery
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={dynamicColors.textMuted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.sourceOptionBtn, { backgroundColor: dynamicColors.surfaceSubtle }]}
+                onPress={() => {
+                  const side = pickSourceSide;
+                  setPickSourceSide(null);
+                  if (side) pickDocument(side);
+                }}
+              >
+                <View style={[styles.sourceOptionIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+                  <Ionicons name="document-text" size={20} color="#10B981" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.sourceOptionTitle, { color: dynamicColors.ink }]}>
+                    Upload PDF Document
+                  </Text>
+                  <Text style={[styles.sourceOptionDesc, { color: dynamicColors.textSecondary }]}>
+                    Select digital PDF proof file (e.g. e-Aadhaar, PAN)
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={dynamicColors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Full Document Viewer Modal */}
       <DocumentPreviewModal
         visible={Boolean(previewUri)}
@@ -632,6 +717,76 @@ const styles = StyleSheet.create({
   actionDivider: {
     width: StyleSheet.hairlineWidth,
     height: '60%',
+  },
+  sourceModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  sourceModalCard: {
+    width: '100%',
+    maxWidth: 440,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  sourceModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  sourceIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sourceModalTitle: {
+    fontFamily: typography.fontHeadline,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  sourceModalSubtitle: {
+    ...typography.caption,
+    fontFamily: typography.fontBody,
+    marginTop: 2,
+  },
+  sourceOptionsList: {
+    gap: 10,
+  },
+  sourceOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 14,
+    gap: 12,
+  },
+  sourceOptionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sourceOptionTitle: {
+    fontFamily: typography.fontHeadline,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sourceOptionDesc: {
+    ...typography.caption,
+    fontFamily: typography.fontBody,
+    marginTop: 2,
+    fontSize: 11.5,
   },
 });
 

@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     aspectRatio: 3 / 4,
   },
   docTitle: {
-    ...typography.titleLarge,
+    ...typography.title,
     fontFamily: typography.fontHeadline,
     color: '#FFFFFF',
     marginTop: 16,

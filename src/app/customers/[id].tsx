@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Modal, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Modal, Alert, Platform, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,7 +24,16 @@ import {
 } from '@/components/ui';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
+import { radii } from '@/theme/spacing';
 import { useTheme } from '@/store/useThemeStore';
+import {
+  KYCDocumentPicker,
+  isPdfDocument,
+  openOrShareDocument,
+  DocumentPreviewModal,
+} from '@/features/customers/components/KYCDocumentPicker';
+import { IdProof, IdProofType } from '@/features/customers/types';
+import { validateKYCDocument, sanitizeKYCDocument } from '@/utils/validators';
 import { useCustomer, useDeleteCustomer, useUpdateCustomer } from '@/features/customers/hooks';
 import { useLoans } from '@/features/loans/hooks';
 import { usePayments } from '@/features/payments/hooks';
@@ -108,6 +117,131 @@ export default function CustomerDetailScreen() {
   const [editOccupation, setEditOccupation] = useState('');
   const [editCity, setEditCity] = useState('');
   const [editScheme, setEditScheme] = useState('');
+
+  // ID Proof Add / Edit Modal State
+  const [proofModalOpen, setProofModalOpen] = useState(false);
+  const [editingProofIndex, setEditingProofIndex] = useState<number | null>(null);
+  const [proofType, setProofType] = useState<IdProofType>('Aadhaar');
+  const [proofNumber, setProofNumber] = useState('');
+  const [proofFrontUri, setProofFrontUri] = useState('');
+  const [proofBackUri, setProofBackUri] = useState('');
+  const [proofFrontName, setProofFrontName] = useState<string | undefined>(undefined);
+  const [proofBackName, setProofBackName] = useState<string | undefined>(undefined);
+  const [proofError, setProofError] = useState('');
+
+  // Document Full Preview State
+  const [previewDocUri, setPreviewDocUri] = useState<string | null>(null);
+  const [previewDocTitle, setPreviewDocTitle] = useState('Proof Document');
+
+  const handleOpenAddProof = () => {
+    setEditingProofIndex(null);
+    const existingTypes = (customer?.idProofs || []).map((p) => p.type);
+    const nextType: IdProofType = !existingTypes.includes('Aadhaar')
+      ? 'Aadhaar'
+      : !existingTypes.includes('PAN')
+      ? 'PAN'
+      : !existingTypes.includes('Voter')
+      ? 'Voter'
+      : !existingTypes.includes('RationCard')
+      ? 'RationCard'
+      : 'Other';
+
+    setProofType(nextType);
+    setProofNumber('');
+    setProofFrontUri('');
+    setProofBackUri('');
+    setProofFrontName(undefined);
+    setProofBackName(undefined);
+    setProofError('');
+    setProofModalOpen(true);
+  };
+
+  const handleOpenEditProof = (index: number) => {
+    const proof = customer?.idProofs?.[index];
+    if (!proof) return;
+    setEditingProofIndex(index);
+    setProofType(proof.type || 'Aadhaar');
+    setProofNumber(proof.number || '');
+    setProofFrontUri(proof.frontUrl || '');
+    setProofBackUri(proof.backUrl || '');
+    setProofFrontName(undefined);
+    setProofBackName(undefined);
+    setProofError('');
+    setProofModalOpen(true);
+  };
+
+  const handleSaveProof = async () => {
+    if (!customer) return;
+    const cleanNumber = sanitizeKYCDocument(proofType, proofNumber);
+    if (cleanNumber.length > 0) {
+      const valRes = validateKYCDocument(proofType, cleanNumber, { required: false });
+      if (!valRes.isValid) {
+        setProofError(valRes.error || 'Invalid ID number');
+        return;
+      }
+    }
+
+    const currentProofs = [...(customer.idProofs || [])];
+    const newProofData: IdProof = {
+      id: editingProofIndex !== null && currentProofs[editingProofIndex]
+        ? currentProofs[editingProofIndex].id
+        : `proof-${Date.now()}`,
+      type: proofType,
+      number: cleanNumber,
+      frontUrl: proofFrontUri || undefined,
+      backUrl: proofBackUri || undefined,
+      verified: true,
+    };
+
+    if (editingProofIndex !== null && editingProofIndex >= 0 && editingProofIndex < currentProofs.length) {
+      currentProofs[editingProofIndex] = newProofData;
+    } else {
+      currentProofs.push(newProofData);
+    }
+
+    try {
+      await updateMutation.mutateAsync({
+        customerId: customer.id,
+        updates: { idProofs: currentProofs },
+      });
+      setProofModalOpen(false);
+      showSuccess(editingProofIndex !== null ? 'ID proof updated successfully' : 'New ID proof added successfully');
+      refetch();
+    } catch (err: any) {
+      showError(err?.message || 'Failed to save ID proof');
+    }
+  };
+
+  const handleDeleteProof = (index: number) => {
+    if (!customer) return;
+    const proof = customer.idProofs?.[index];
+    if (!proof) return;
+
+    Alert.alert(
+      'Remove ID Proof',
+      `Are you sure you want to delete this ${proof.type} card proof from ${customer.fullName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const updated = (customer.idProofs || []).filter((_, i) => i !== index);
+            try {
+              await updateMutation.mutateAsync({
+                customerId: customer.id,
+                updates: { idProofs: updated },
+              });
+              showSuccess(`${proof.type} proof removed`);
+              refetch();
+            } catch (err: any) {
+              showError('Failed to delete proof');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     initializeProducts();
@@ -536,47 +670,301 @@ export default function CustomerDetailScreen() {
         </View>
       )}
 
-      {/* Tab 4: KYC & Proofs with Biometric Reveal */}
+      {/* Tab 4: KYC & Proofs with Camera, Gallery & PDF Upload */}
       {activeTab === 'docs' && (
         <View style={styles.tabContent}>
-          <Card variant="surface" style={styles.cardBox}>
-            {customer.idProofs.map((proof) => {
+          {/* Header Row with "+ Add ID Proof" button */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <View>
+              <Text style={{ fontFamily: typography.fontHeadline, fontSize: 16, fontWeight: '700', color: dynamicColors.ink }}>
+                KYC & Identity Proofs
+              </Text>
+              <Text style={{ fontSize: 11.5, color: dynamicColors.textSecondary, marginTop: 2 }}>
+                Camera photos, gallery images & PDF documents
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={handleOpenAddProof}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+                backgroundColor: dynamicColors.primary,
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+                borderRadius: 8,
+              }}
+            >
+              <Ionicons name="add" size={16} color="#FFFFFF" />
+              <Text style={{ fontFamily: typography.fontHeadline, fontSize: 12, fontWeight: '700', color: '#FFFFFF' }}>
+                Add Proof
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {(!customer.idProofs || customer.idProofs.length === 0) ? (
+            <Card variant="surface" style={styles.cardBox}>
+              <EmptyState
+                iconName="document-text-outline"
+                title="No ID Proofs Uploaded"
+                description="Upload customer's Aadhaar, PAN, Voter, Ration Card or other ID proofs using Camera, Gallery or PDF."
+                actionTitle="+ Upload First ID Proof"
+                onAction={handleOpenAddProof}
+              />
+            </Card>
+          ) : (
+            customer.idProofs.map((proof, idx) => {
               const isRevealed = unmaskedId === proof.id;
               const displayNum = isRevealed ? proof.number : maskIdentifier(proof.number);
 
+              let iconName: keyof typeof Ionicons.glyphMap = 'card-outline';
+              if (proof.type === 'PAN') iconName = 'document-text-outline';
+              else if (proof.type === 'Voter') iconName = 'finger-print-outline';
+              else if (proof.type === 'DrivingLicense') iconName = 'car-outline';
+              else if (proof.type === 'RationCard') iconName = 'receipt-outline';
+              else if (proof.type === 'Passport') iconName = 'globe-outline';
+
               return (
-                <View key={proof.id} style={[styles.proofItem, { borderBottomColor: dynamicColors.border }]}>
-                  <View style={styles.proofTop}>
-                    <View style={[styles.proofIconWrap, { backgroundColor: dynamicColors.primarySoft }]}>
-                      <Ionicons name="card-outline" size={20} color={dynamicColors.primaryDark} />
+                <Card
+                  key={proof.id || idx}
+                  variant="surface"
+                  style={{
+                    marginBottom: 12,
+                    padding: 14,
+                    borderRadius: radii.card,
+                    borderColor: dynamicColors.border,
+                    borderWidth: 1,
+                    backgroundColor: dynamicColors.surface,
+                  }}
+                >
+                  {/* Top Row: Icon, Type, Number, Biometric Reveal, Edit & Delete */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                      <View style={[styles.proofIconWrap, { backgroundColor: dynamicColors.primarySoft }]}>
+                        <Ionicons name={iconName} size={20} color={dynamicColors.primaryDark} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={[styles.proofType, { color: dynamicColors.ink }]}>
+                            {proof.type} Card
+                          </Text>
+                          <Badge
+                            status={proof.verified ? 'PAID' : 'DRAFT'}
+                            label={proof.verified ? 'Verified' : 'Pending'}
+                            size="sm"
+                          />
+                        </View>
+                        <Text style={[styles.proofNumber, { color: dynamicColors.textSecondary }]}>
+                          {displayNum || 'Number Not Recorded'}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.proofInfo}>
-                      <Text style={[styles.proofType, { color: dynamicColors.ink }]}>{proof.type} Card</Text>
-                      <Text style={[styles.proofNumber, { color: dynamicColors.textSecondary }]}>{displayNum}</Text>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <TouchableOpacity
+                        onPress={() => handleRevealId(proof.id, proof.number)}
+                        style={styles.eyeBtn}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons
+                          name={isRevealed ? 'eye-off-outline' : 'eye-outline'}
+                          size={19}
+                          color={dynamicColors.primaryDark}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleOpenEditProof(idx)}
+                        style={{ padding: 6 }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="pencil-outline" size={18} color={dynamicColors.primaryDark} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteProof(idx)}
+                        style={{ padding: 6 }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={dynamicColors.danger} />
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      onPress={() => handleRevealId(proof.id, proof.number)}
-                      style={styles.eyeBtn}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons
-                        name={isRevealed ? 'eye-off-outline' : 'eye-outline'}
-                        size={20}
-                        color={dynamicColors.primaryDark}
-                      />
-                    </TouchableOpacity>
                   </View>
 
+                  {/* Document Attachments (Front & Back) */}
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                    {/* Front Side */}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, fontFamily: typography.fontHeadline, color: dynamicColors.textSecondary, marginBottom: 4 }}>
+                        Front Side
+                      </Text>
+                      {proof.frontUrl ? (
+                        isPdfDocument(proof.frontUrl) ? (
+                          <TouchableOpacity
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              padding: 8,
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderColor: dynamicColors.border,
+                              backgroundColor: dynamicColors.surfaceMuted,
+                              gap: 8,
+                            }}
+                            onPress={() => openOrShareDocument(proof.frontUrl!, `${customer.fullName}_${proof.type}_Front`)}
+                          >
+                            <Ionicons name="document-text" size={24} color="#EF4444" />
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontFamily: typography.fontHeadline, fontSize: 11, fontWeight: '700', color: dynamicColors.ink }} numberOfLines={1}>
+                                PDF Document
+                              </Text>
+                              <Text style={{ fontSize: 9.5, color: dynamicColors.primaryDark, marginTop: 1 }}>
+                                Tap to Open / View
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={{
+                              height: 85,
+                              borderRadius: 8,
+                              overflow: 'hidden',
+                              borderWidth: 1,
+                              borderColor: dynamicColors.border,
+                              position: 'relative',
+                            }}
+                            onPress={() => {
+                              setPreviewDocUri(proof.frontUrl!);
+                              setPreviewDocTitle(`${customer.fullName} - ${proof.type} Front`);
+                            }}
+                          >
+                            <Image source={{ uri: proof.frontUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                            <View style={styles.viewZoomBadge}>
+                              <Ionicons name="eye-outline" size={11} color="#FFFFFF" style={{ marginRight: 2 }} />
+                              <Text style={{ color: '#FFFFFF', fontSize: 9.5, fontWeight: '700' }}>View</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )
+                      ) : (
+                        <TouchableOpacity
+                          style={{
+                            height: 60,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: dynamicColors.border,
+                            borderStyle: 'dashed',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: dynamicColors.surfaceMuted,
+                          }}
+                          onPress={() => handleOpenEditProof(idx)}
+                        >
+                          <Ionicons name="cloud-upload-outline" size={18} color={dynamicColors.primaryDark} />
+                          <Text style={{ fontSize: 10, color: dynamicColors.primaryDark, fontWeight: '700', marginTop: 2 }}>
+                            + Upload Front
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {/* Back Side (if applicable) */}
+                    {proof.type !== 'PAN' && (
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 11, fontFamily: typography.fontHeadline, color: dynamicColors.textSecondary, marginBottom: 4 }}>
+                          Back Side
+                        </Text>
+                        {proof.backUrl ? (
+                          isPdfDocument(proof.backUrl) ? (
+                            <TouchableOpacity
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                padding: 8,
+                                borderRadius: 8,
+                                borderWidth: 1,
+                                borderColor: dynamicColors.border,
+                                backgroundColor: dynamicColors.surfaceMuted,
+                                gap: 8,
+                              }}
+                              onPress={() => openOrShareDocument(proof.backUrl!, `${customer.fullName}_${proof.type}_Back`)}
+                            >
+                              <Ionicons name="document-text" size={24} color="#EF4444" />
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ fontFamily: typography.fontHeadline, fontSize: 11, fontWeight: '700', color: dynamicColors.ink }} numberOfLines={1}>
+                                  PDF Document
+                                </Text>
+                                <Text style={{ fontSize: 9.5, color: dynamicColors.primaryDark, marginTop: 1 }}>
+                                  Tap to Open / View
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity
+                              style={{
+                                height: 85,
+                                borderRadius: 8,
+                                overflow: 'hidden',
+                                borderWidth: 1,
+                                borderColor: dynamicColors.border,
+                                position: 'relative',
+                              }}
+                              onPress={() => {
+                                setPreviewDocUri(proof.backUrl!);
+                                setPreviewDocTitle(`${customer.fullName} - ${proof.type} Back`);
+                              }}
+                            >
+                              <Image source={{ uri: proof.backUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                              <View style={styles.viewZoomBadge}>
+                                <Ionicons name="eye-outline" size={11} color="#FFFFFF" style={{ marginRight: 2 }} />
+                                <Text style={{ color: '#FFFFFF', fontSize: 9.5, fontWeight: '700' }}>View</Text>
+                              </View>
+                            </TouchableOpacity>
+                          )
+                        ) : (
+                          <TouchableOpacity
+                            style={{
+                              height: 60,
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderColor: dynamicColors.border,
+                              borderStyle: 'dashed',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: dynamicColors.surfaceMuted,
+                            }}
+                            onPress={() => handleOpenEditProof(idx)}
+                          >
+                            <Ionicons name="cloud-upload-outline" size={18} color={dynamicColors.primaryDark} />
+                            <Text style={{ fontSize: 10, color: dynamicColors.primaryDark, fontWeight: '700', marginTop: 2 }}>
+                              + Upload Back
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Edit / Upload button */}
                   <TouchableOpacity
-                    style={styles.viewDocBtn}
-                    onPress={() => router.push('/proof-viewer' as any)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      marginTop: 12,
+                      paddingVertical: 7,
+                      borderRadius: 8,
+                      backgroundColor: dynamicColors.primarySoft,
+                    }}
+                    onPress={() => handleOpenEditProof(idx)}
                   >
-                    <Text style={[styles.viewDocText, { color: dynamicColors.primaryDark }]}>View Document Photos →</Text>
+                    <Ionicons name="camera-outline" size={14} color={dynamicColors.primaryDark} />
+                    <Text style={{ fontFamily: typography.fontHeadline, fontSize: 11.5, fontWeight: '700', color: dynamicColors.primaryDark }}>
+                      Edit / Upload Photos & PDFs
+                    </Text>
                   </TouchableOpacity>
-                </View>
+                </Card>
               );
-            })}
-          </Card>
+            })
+          )}
         </View>
       )}
 
@@ -660,6 +1048,33 @@ export default function CustomerDetailScreen() {
                 onSelect={(val) => setEditScheme(val)}
                 options={loanSchemeOptions}
               />
+
+              {/* ID Proofs Management Shortcut inside Edit Modal */}
+              <View style={{ marginTop: 14, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: dynamicColors.border, backgroundColor: dynamicColors.surfaceMuted }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="card-outline" size={18} color={dynamicColors.primaryDark} />
+                    <Text style={{ fontFamily: typography.fontHeadline, fontSize: 13, fontWeight: '700', color: dynamicColors.ink }}>
+                      KYC Documents ({customer?.idProofs?.length || 0})
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setEditModalOpen(false);
+                      setActiveTab('docs');
+                      handleOpenAddProof();
+                    }}
+                    style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: dynamicColors.primarySoft }}
+                  >
+                    <Text style={{ fontFamily: typography.fontHeadline, fontSize: 11, fontWeight: '700', color: dynamicColors.primaryDark }}>
+                      + Add / Upload
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={{ fontSize: 11, color: dynamicColors.textSecondary, marginTop: 4 }}>
+                  Camera photo, gallery image & PDF documents supported for all ID types.
+                </Text>
+              </View>
             </ScrollView>
 
             <View style={{ marginTop: 16 }}>
@@ -673,6 +1088,112 @@ export default function CustomerDetailScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Add / Edit ID Proof Modal */}
+      <Modal visible={proofModalOpen} animationType="slide" transparent onRequestClose={() => setProofModalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: dynamicColors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: dynamicColors.ink }]}>
+                {editingProofIndex !== null ? 'Edit ID Proof & Photos' : 'Add New ID Proof'}
+              </Text>
+              <TouchableOpacity onPress={() => setProofModalOpen(false)}>
+                <Ionicons name="close" size={24} color={dynamicColors.ink} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false}>
+              <SelectModal
+                label="ID Card Type *"
+                selectedValue={proofType}
+                onSelect={(val) => {
+                  setProofType(val as IdProofType);
+                  setProofError('');
+                }}
+                options={[
+                  { label: 'Aadhaar Card (12 Digits)', value: 'Aadhaar', icon: 'card-outline' },
+                  { label: 'PAN Card (ABCDE1234F - 10 Chars)', value: 'PAN', icon: 'document-text-outline' },
+                  { label: 'Voter ID Card (10 Chars)', value: 'Voter', icon: 'finger-print-outline' },
+                  { label: 'Driving License', value: 'DrivingLicense', icon: 'car-outline' },
+                  { label: 'Ration Card (Smart Card / Family Card)', value: 'RationCard', icon: 'receipt-outline' },
+                  { label: 'Passport (8 Chars)', value: 'Passport', icon: 'globe-outline' },
+                  { label: 'Other Government / Property Proof', value: 'Other', icon: 'document-attach-outline' },
+                ]}
+              />
+
+              <Input
+                label={
+                  proofType === 'Aadhaar'
+                    ? 'Aadhaar Number (Strictly 12 Digits)'
+                    : proofType === 'PAN'
+                    ? 'PAN Number (Strictly 10 Characters)'
+                    : `${proofType} Number`
+                }
+                placeholder={
+                  proofType === 'Aadhaar'
+                    ? 'e.g. 12-digit Aadhaar (123456789012)'
+                    : proofType === 'PAN'
+                    ? 'e.g. ABCDE1234F'
+                    : 'Enter ID proof number'
+                }
+                keyboardType={proofType === 'Aadhaar' ? 'numeric' : 'default'}
+                autoCapitalize="characters"
+                maxLength={
+                  proofType === 'Aadhaar'
+                    ? 12
+                    : proofType === 'PAN'
+                    ? 10
+                    : proofType === 'Passport'
+                    ? 8
+                    : 16
+                }
+                value={proofNumber}
+                onChangeText={(val) => {
+                  const cleaned = sanitizeKYCDocument(proofType, val);
+                  setProofNumber(cleaned);
+                  if (proofError) setProofError('');
+                }}
+                error={proofError}
+                leadingIcon="keypad-outline"
+              />
+
+              <KYCDocumentPicker
+                label={`${proofType} Document Proof (Camera, Gallery Image or PDF)`}
+                frontUri={proofFrontUri}
+                backUri={proofBackUri}
+                frontName={proofFrontName}
+                backName={proofBackName}
+                hasBackSide={proofType !== 'PAN'}
+                onChangeFront={(uri, name) => {
+                  setProofFrontUri(uri);
+                  if (name) setProofFrontName(name);
+                }}
+                onChangeBack={(uri, name) => {
+                  setProofBackUri(uri);
+                  if (name) setProofBackName(name);
+                }}
+              />
+            </ScrollView>
+
+            <View style={{ marginTop: 16 }}>
+              <PillButton
+                title={editingProofIndex !== null ? 'Save Proof Changes' : 'Attach ID Proof to Customer'}
+                onPress={handleSaveProof}
+                variant="primary"
+                fullWidth
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Full Document Preview Modal */}
+      <DocumentPreviewModal
+        visible={Boolean(previewDocUri)}
+        uri={previewDocUri || undefined}
+        title={previewDocTitle}
+        onClose={() => setPreviewDocUri(null)}
+      />
 
       {/* Confirm Archive Dialog */}
       <ConfirmDialog
@@ -936,5 +1457,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     marginLeft: 6,
+  },
+  viewZoomBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
   },
 });
