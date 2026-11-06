@@ -88,7 +88,7 @@ export function ListRow({
         {rightNode ? (
           rightNode
         ) : (
-          <>
+          <View style={styles.amountCol}>
             {rightAmount && (
               <Text
                 style={[
@@ -104,7 +104,7 @@ export function ListRow({
                 {rightSubtext}
               </Text>
             )}
-          </>
+          </View>
         )}
         {showChevron && (
           <Ionicons
@@ -178,9 +178,12 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   rightSection: {
-    alignItems: 'flex-end',
+    alignItems: 'center',
     flexDirection: 'row',
-    gap: 6,
+    gap: 4,
+  },
+  amountCol: {
+    alignItems: 'flex-end',
   },
   amount: {
     fontFamily: typography.fontPolymath,

@@ -6,7 +6,6 @@ import {
   Screen,
   Header,
   DisplayTitle,
-  Tile,
   StackedLoanCards,
   Card,
   ListRow,
@@ -17,6 +16,7 @@ import {
   useToast,
   HomeMiniAnalytics,
   AuditLogsViewer,
+  HomeFinancialBento,
 } from '@/components/ui';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
@@ -68,14 +68,14 @@ export default function HomeScreen() {
 
   // Compute payments collected today
   const todayStr = new Date().toISOString().split('T')[0];
-  const collectedTodayPaise = (payments || [])
-    .filter((p) => p.paidOn.startsWith(todayStr))
-    .reduce((sum, p) => sum + p.amount, 0);
+  const collectedTodayPayments = (payments || []).filter((p) => p.paidOn.startsWith(todayStr));
+  const collectedTodayPaise = collectedTodayPayments.reduce((sum, p) => sum + p.amount, 0);
+  const collectedTodayCount = collectedTodayPayments.length;
 
   // Compute installments due today
-  const dueTodayPaise = activeLoans
-    .filter((l) => l.nextDueDate && l.nextDueDate.startsWith(todayStr))
-    .reduce((sum, l) => sum + l.installmentAmount, 0);
+  const dueTodayLoans = activeLoans.filter((l) => l.nextDueDate && l.nextDueDate.startsWith(todayStr));
+  const dueTodayPaise = dueTodayLoans.reduce((sum, l) => sum + l.installmentAmount, 0);
+  const dueTodayCount = dueTodayLoans.length;
 
   // Prepare stacked loan cards dynamically from active loans
   const stackedCards: StackedLoanItem[] = (activeLoans.slice(0, 3)).map((l) => {
@@ -101,19 +101,19 @@ export default function HomeScreen() {
     };
   });
 
-  // Borrowers due today or overdue
+  // Customers due today or overdue
   const dueCollectionList = activeLoans.filter((l) => l.status === 'OVERDUE' || (l.nextDueDate && l.nextDueDate <= todayStr)).slice(0, 5);
 
   const handleCall = (phone?: string) => {
     if (phone) Linking.openURL(`tel:${phone}`);
-    else Alert.alert('Notice', 'No phone number on record for this borrower.');
+    else Alert.alert('Notice', 'No phone number on record for this customer.');
   };
 
   const handleWhatsApp = (phone?: string, name?: string) => {
     if (phone) {
       openWhatsApp(phone, `Hello ${name}, friendly payment reminder from ${business.businessName || 'Senthur Finance'}.`);
     } else {
-      Alert.alert('Notice', 'No phone number on record for this borrower.');
+      Alert.alert('Notice', 'No phone number on record for this customer.');
     }
   };
 
@@ -139,72 +139,24 @@ export default function HomeScreen() {
         highlightColor={colors.primaryDark}
       />
 
-      {/* Row 1: Primary KPI Cards - Total Received & Total Pending */}
-      <View style={styles.tilesRow}>
-        <Tile
-          label="Money Collected"
-          value={formatIndianCurrency(totalReceivedPaise, { isMinorUnit: true }).formatted}
-          subtitle={`${payments?.length || 0} payments`}
-          iconName="checkmark-done-circle-outline"
-          iconColor={colors.success}
-          style={styles.flexTile}
-        />
-        <Tile
-          label="To Collect"
-          value={formatIndianCurrency(totalPendingPaise, { isMinorUnit: true }).formatted}
-          subtitle={`${activeLoansCount} ongoing loans`}
-          iconName="hourglass-outline"
-          iconColor={colors.warning}
-          style={styles.flexTile}
-        />
-      </View>
-
-      {/* Row 2: Secondary KPI Cards - Active Loans & Disburse New Loan */}
-      <View style={styles.tilesRow}>
-        <Tile
-          label="Active Loans"
-          value={activeLoansCount}
-          subtitle={`${formatIndianCurrency(activePrincipalPaise, { isMinorUnit: true }).formatted} given`}
-          iconName="briefcase-outline"
-          iconColor={colors.primaryDark}
-          style={styles.flexTile}
-        />
-        <Tile
-          label="New Loan"
-          subtitle="Give new loan"
-          variant="action"
-          hasArrowButton
-          arrowIconName="arrow-forward"
-          onPress={() => router.push('/loans/new' as any)}
-          style={styles.flexTile}
-        />
-      </View>
-
-      {/* Row 3: Operational Daily Collections Summary */}
-      <View style={styles.tilesRow}>
-        <Tile
-          label="Collected Today"
-          value={formatIndianCurrency(collectedTodayPaise, { isMinorUnit: true }).formatted}
-          iconName="checkmark-done"
-          iconColor={colors.success}
-          style={styles.flexTile}
-        />
-        <Tile
-          label="Due Today"
-          value={formatIndianCurrency(dueTodayPaise, { isMinorUnit: true }).formatted}
-          iconName="time-outline"
-          iconColor={colors.warning}
-          style={styles.flexTile}
-        />
-        <Tile
-          label="Overdue"
-          value={formatIndianCurrency(overduePaise, { isMinorUnit: true }).formatted}
-          badgeCount={overdueLoans.length}
-          iconName="alert-circle-outline"
-          iconColor={colors.danger}
-          style={styles.flexTile}
-        />
-      </View>
+      {/* Financial Bento Grid: Flexing dynamic values, zero truncation & theme shades */}
+      <HomeFinancialBento
+        totalReceivedPaise={totalReceivedPaise}
+        totalPendingPaise={totalPendingPaise}
+        activePrincipalPaise={activePrincipalPaise}
+        activeLoansCount={activeLoansCount}
+        totalPaymentsCount={payments?.length || 0}
+        collectedTodayPaise={collectedTodayPaise}
+        collectedTodayCount={collectedTodayCount}
+        dueTodayPaise={dueTodayPaise}
+        dueTodayCount={dueTodayCount}
+        overduePaise={overduePaise}
+        overdueCount={overdueLoans.length}
+        onNewLoanPress={() => router.push('/loans/new' as any)}
+        onRecordPaymentPress={() => router.push('/payments/new' as any)}
+        onLoansPress={() => router.push('/(tabs)/loans' as any)}
+        onOverduePress={() => router.push('/(tabs)/loans' as any)}
+      />
 
       {/* Mini Analytics: Progress Bar & Category Donut Pie Chart */}
       <HomeMiniAnalytics
@@ -301,10 +253,10 @@ export default function HomeScreen() {
               subtitle={`${pay.receiptNumber} • ${pay.mode}`}
               metaText={formatDate(pay.paidOn, 'dd MMM, hh:mm a')}
               iconName="arrow-down-circle"
-              iconColor={colors.success}
-              iconBgColor={colors.surfaceMuted}
+              iconColor={colors.primaryDark}
+              iconBgColor={colors.primarySoft}
               rightAmount={`+${formatIndianCurrency(pay.amount, { isMinorUnit: true }).formatted}`}
-              rightAmountType="positive"
+              rightAmountType="neutral"
               rightSubtext="Repayment"
               showChevron
               onPress={() => {

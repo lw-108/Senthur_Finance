@@ -13,66 +13,78 @@ import { typography } from '@/theme/typography';
 
 interface SplashScreenViewProps {
   onFinish?: () => void;
-  duration?: number; // duration in milliseconds (default: 5500ms = 5.5s)
+  duration?: number; // fallback max duration in milliseconds (default: 2800ms)
+  isReady?: boolean; // reactive signal when backend session and fonts are loaded
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export function SplashScreenView({
   onFinish,
-  duration = 5500,
+  duration = 2800,
+  isReady = false,
 }: SplashScreenViewProps) {
   const isCompactScreen = SCREEN_HEIGHT < 700 || SCREEN_WIDTH < 380;
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const exitFadeAnim = useRef(new Animated.Value(1)).current;
+  const hasFinishedRef = useRef(false);
 
   // Loading percentage: 0 to 100
   const [percent, setPercent] = useState(0);
+
+  const triggerExit = () => {
+    if (hasFinishedRef.current) return;
+    hasFinishedRef.current = true;
+    setPercent(100);
+
+    Animated.timing(exitFadeAnim, {
+      toValue: 0,
+      duration: 250,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: Platform.OS !== 'web',
+    }).start(() => {
+      onFinish?.();
+    });
+  };
 
   useEffect(() => {
     // 1. Entrance fade in
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 600,
+      duration: 350,
       useNativeDriver: Platform.OS !== 'web',
     }).start();
 
-    // 2. Smoothly count up to 100 over duration
-    const interval = 50;
-    const totalSteps = duration / interval;
-    let currentStep = 0;
-
+    // 2. Smooth progress counter while loading backend session
+    const interval = 40;
     const timer = setInterval(() => {
-      currentStep++;
-      const currentVal = Math.min(Math.round((currentStep / totalSteps) * 100), 100);
-      setPercent(currentVal);
-
-      if (currentStep >= totalSteps) {
-        clearInterval(timer);
-      }
+      setPercent((prev) => {
+        if (prev >= 90) {
+          return prev; // Hold at 90 until backend session signals isReady
+        }
+        return prev + 2;
+      });
     }, interval);
 
-    // 3. Exit animation after duration
-    const exitTimer = setTimeout(() => {
-      Animated.timing(exitFadeAnim, {
-        toValue: 0,
-        duration: 400,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: Platform.OS !== 'web',
-      }).start(() => {
-        if (onFinish) {
-          onFinish();
-        }
-      });
+    // 3. Fallback safety timer
+    const safetyTimer = setTimeout(() => {
+      triggerExit();
     }, duration);
 
     return () => {
       clearInterval(timer);
-      clearTimeout(exitTimer);
+      clearTimeout(safetyTimer);
     };
-  }, [duration, fadeAnim, exitFadeAnim, onFinish]);
+  }, [duration, fadeAnim]);
+
+  // When backend session signals isReady, finish immediately
+  useEffect(() => {
+    if (isReady && !hasFinishedRef.current) {
+      triggerExit();
+    }
+  }, [isReady]);
 
   // Sizing for Vinayagar image: centered, crisp, contained
   const imageSize = Math.min(SCREEN_WIDTH * 0.62, 260);

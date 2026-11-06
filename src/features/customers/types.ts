@@ -4,6 +4,7 @@ export type IdProofType =
   | 'Voter'
   | 'DrivingLicense'
   | 'Passport'
+  | 'RationCard'
   | 'Other';
 
 export interface IdProof {
@@ -89,4 +90,33 @@ export interface CustomerFilterParams {
   tag?: string;
   sortBy?: 'name' | 'outstanding' | 'lastPayment' | 'risk';
   sortOrder?: 'asc' | 'desc';
+}
+
+export type ContactMergeStrategy =
+  | 'CREATE_NEW'
+  | 'MERGE_INTO_EXISTING'
+  | 'FILL_EMPTY_ONLY'
+  | 'OVERWRITE';
+
+export interface BatchMergeContactInput {
+  name: string;
+  phone: string;
+  allPhones?: string[];
+  email?: string;
+  address?: Partial<CustomerAddress>;
+  photoUrl?: string;
+  company?: string;
+}
+
+export interface MergeStrategyResult {
+  added: number;
+  updated: number;
+  skipped: number;
+  mergedDetails: Array<{
+    contactName: string;
+    phone: string;
+    action: 'CREATED' | 'UPDATED' | 'SKIPPED';
+    strategy: ContactMergeStrategy;
+    customerId: string;
+  }>;
 }

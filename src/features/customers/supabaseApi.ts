@@ -1,8 +1,19 @@
 import { supabase, isSupabaseConfigured, isValidUUID } from '@/lib/supabase/client';
 import { getActiveOrganizationId } from '@/lib/supabase/activeOrg';
-import { Customer, CustomerFilterParams } from './types';
+import {
+  Customer,
+  CustomerFilterParams,
+  ContactMergeStrategy,
+  BatchMergeContactInput,
+  MergeStrategyResult,
+} from './types';
 import { recordAuditLog } from '@/features/audit/supabaseApi';
 import { secureStorage } from '@/lib/storage/secureStorage';
+import { normalizePhone, arePhonesEqual, matchesCustomerPhone } from '@/lib/phone/normalizePhone';
+import { applyMergeStrategyToCustomer } from './customerMergeService';
+import { customerRowToDomain, customerDomainToRow } from './customerMappers';
+
+export { customerRowToDomain, customerDomainToRow };
 
 const LOCAL_CUSTOMERS_KEY = 'sf_local_customers_cache_v2';
 
@@ -32,75 +43,6 @@ async function persistLocalCache() {
 
 export function seedDemoCustomers(_adminUid: string): Customer[] {
   return localCustomersCache;
-}
-
-export function customerRowToDomain(row: any): Customer {
-  return {
-    id: row.id,
-    fullName: row.full_name,
-    nickname: row.nickname || undefined,
-    phone: row.phone,
-    altPhone: row.alt_phone || undefined,
-    email: row.email || undefined,
-    whatsapp: row.whatsapp || undefined,
-    photoUrl: row.photo_url || undefined,
-    gender: row.gender || undefined,
-    dob: row.dob || undefined,
-    occupation: row.occupation || undefined,
-    monthlyIncome: Number(row.monthly_income_paise || 0),
-    address: row.address || { line1: '', city: '', state: '', pincode: '' },
-    idProofs: Array.isArray(row.id_proofs) ? row.id_proofs : [],
-    references: Array.isArray(row.customer_references) ? row.customer_references : [],
-    guarantor: row.guarantor || undefined,
-    tags: Array.isArray(row.tags) ? row.tags : [],
-    notes: row.notes || undefined,
-    rating: row.rating || undefined,
-    creditScoreInternal: row.credit_score_internal || undefined,
-    totals: row.totals || {
-      activeLoans: 0,
-      totalLent: 0,
-      totalOutstanding: 0,
-      totalPaid: 0,
-      overdueAmount: 0,
-    },
-    status: row.status || 'Active',
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    createdBy: row.created_by || '',
-    isDeleted: Boolean(row.is_deleted),
-  };
-}
-
-export function customerDomainToRow(c: Partial<Customer>, orgId: string, userId?: string | null): any {
-  const row: Record<string, any> = {
-    organization_id: orgId,
-  };
-
-  if (c.fullName !== undefined) row.full_name = c.fullName;
-  if (c.nickname !== undefined) row.nickname = c.nickname;
-  if (c.phone !== undefined) row.phone = c.phone;
-  if (c.altPhone !== undefined) row.alt_phone = c.altPhone;
-  if (c.email !== undefined) row.email = c.email;
-  if (c.whatsapp !== undefined) row.whatsapp = c.whatsapp;
-  if (c.photoUrl !== undefined) row.photo_url = c.photoUrl;
-  if (c.gender !== undefined) row.gender = c.gender;
-  if (c.dob !== undefined) row.dob = c.dob;
-  if (c.occupation !== undefined) row.occupation = c.occupation;
-  if (c.monthlyIncome !== undefined) row.monthly_income_paise = c.monthlyIncome;
-  if (c.address !== undefined) row.address = c.address;
-  if (c.idProofs !== undefined) row.id_proofs = c.idProofs;
-  if (c.references !== undefined) row.customer_references = c.references;
-  if (c.guarantor !== undefined) row.guarantor = c.guarantor;
-  if (c.tags !== undefined) row.tags = c.tags;
-  if (c.notes !== undefined) row.notes = c.notes;
-  if (c.rating !== undefined) row.rating = c.rating;
-  if (c.creditScoreInternal !== undefined) row.credit_score_internal = c.creditScoreInternal;
-  if (c.status !== undefined) row.status = c.status;
-  if (c.totals !== undefined) row.totals = c.totals;
-  if (c.isDeleted !== undefined) row.is_deleted = c.isDeleted;
-  if (userId) row.created_by = isValidUUID(userId) ? userId : null;
-
-  return row;
 }
 
 export async function fetchCustomers(
@@ -394,13 +336,14 @@ export async function bulkDeleteCustomers(
 }
 
 /**
- * Merge and import device phone contacts directly into borrower records.
- * Updates matching phone numbers or adds new borrowers.
+ * Merge and import device phone contacts directly into customer records.
+ * Supports CREATE_NEW, MERGE_INTO_EXISTING, FILL_EMPTY_ONLY, and OVERWRITE strategies.
  */
 export async function batchMergePhoneContacts(
   _adminUid: string,
-  contactsToMerge: { name: string; phone: string }[]
-): Promise<{ added: number; updated: number }> {
+  contactsToMerge: BatchMergeContactInput[],
+  strategy: ContactMergeStrategy = 'MERGE_INTO_EXISTING'
+): Promise<MergeStrategyResult> {
   await ensureLocalCacheLoaded();
   const orgId = await getActiveOrganizationId();
   const { data: userRes } = await supabase.auth.getUser();
@@ -409,44 +352,74 @@ export async function batchMergePhoneContacts(
 
   let addedCount = 0;
   let updatedCount = 0;
+  let skippedCount = 0;
+  const mergedDetails: MergeStrategyResult['mergedDetails'] = [];
 
   for (const c of contactsToMerge) {
-    const cleanPhone = c.phone.replace(/\D/g, '').slice(-10);
-    if (!cleanPhone || cleanPhone.length < 10) continue;
-    const name = c.name?.trim() || 'Borrower';
+    const phoneNorm = normalizePhone(c.phone);
+    if (!phoneNorm.isValid && phoneNorm.digits10.length < 10) {
+      skippedCount++;
+      continue;
+    }
+    const cleanPhone = phoneNorm.digits10;
+    const name = c.name?.trim() || 'Customer';
 
-    // Check if customer already exists by phone
-    const existingIndex = localCustomersCache.findIndex(
-      (item) => item.phone && item.phone.replace(/\D/g, '').slice(-10) === cleanPhone
-    );
+    // Collect all candidate numbers for matching
+    const candidatePhones = [c.phone, ...(c.allPhones || [])]
+      .map((p) => normalizePhone(p).digits10)
+      .filter((p) => Boolean(p) && p.length >= 10);
 
-    if (existingIndex >= 0) {
+    // Locate matching existing customer across all phone numbers unless strategy is CREATE_NEW
+    let existingIndex = -1;
+    if (strategy !== 'CREATE_NEW') {
+      existingIndex = localCustomersCache.findIndex((item) => {
+        if (item.isDeleted) return false;
+        return candidatePhones.some((candidate) => matchesCustomerPhone(candidate, item));
+      });
+    }
+
+    if (existingIndex >= 0 && strategy !== 'CREATE_NEW') {
       const existing = localCustomersCache[existingIndex];
-      const updated: Customer = {
-        ...existing,
-        fullName: existing.fullName || name,
-        updatedAt: now,
-      };
+      const updated = applyMergeStrategyToCustomer(existing, c, strategy);
       localCustomersCache[existingIndex] = updated;
       updatedCount++;
 
+      mergedDetails.push({
+        contactName: name,
+        phone: cleanPhone,
+        action: 'UPDATED',
+        strategy,
+        customerId: existing.id,
+      });
+
       if (isSupabaseConfigured() && isValidUUID(existing.id)) {
         try {
+          const rowUpdates = customerDomainToRow(updated, orgId);
+          rowUpdates.updated_at = now;
           await (supabase.from('customers') as any)
-            .update({ full_name: updated.fullName, updated_at: now })
+            .update(rowUpdates)
             .eq('id', existing.id)
             .eq('organization_id', orgId);
-        } catch {}
+        } catch (dbErr: any) {
+          console.warn('[Customers Supabase] Merge update failed, saved locally:', dbErr?.message);
+        }
       }
     } else {
+      // Create new customer record
       const newCustData: Omit<Customer, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'isDeleted'> = {
         fullName: name,
         phone: cleanPhone,
+        altPhone: c.allPhones && c.allPhones.length > 1
+          ? c.allPhones.slice(1).map((p) => normalizePhone(p).digits10).join(', ')
+          : undefined,
+        email: c.email || undefined,
+        photoUrl: c.photoUrl || undefined,
         address: {
-          line1: 'Local Address',
-          city: 'Coimbatore',
-          state: 'Tamil Nadu',
-          pincode: '641001',
+          line1: c.address?.line1 || 'Local Address',
+          line2: c.address?.line2 || undefined,
+          city: c.address?.city || 'Coimbatore',
+          state: c.address?.state || 'Tamil Nadu',
+          pincode: c.address?.pincode || '641001',
         },
         idProofs: [],
         references: [],
@@ -473,7 +446,9 @@ export async function batchMergePhoneContacts(
           if (!error && inserted) {
             insertedDomain = customerRowToDomain(inserted);
           }
-        } catch {}
+        } catch (dbErr: any) {
+          console.warn('[Customers Supabase] Contact insert failed, saved locally:', dbErr?.message);
+        }
       }
 
       if (!insertedDomain) {
@@ -489,9 +464,31 @@ export async function batchMergePhoneContacts(
 
       localCustomersCache.unshift(insertedDomain);
       addedCount++;
+
+      mergedDetails.push({
+        contactName: name,
+        phone: cleanPhone,
+        action: 'CREATED',
+        strategy,
+        customerId: insertedDomain.id,
+      });
     }
   }
 
   await persistLocalCache();
-  return { added: addedCount, updated: updatedCount };
+
+  // Audit trail
+  await recordAuditLog({
+    organizationId: orgId,
+    action: 'UPDATE',
+    entityType: 'CUSTOMER',
+    summary: `Contact import completed (${strategy}): ${addedCount} added, ${updatedCount} updated, ${skippedCount} skipped`,
+  }).catch(() => {});
+
+  return {
+    added: addedCount,
+    updated: updatedCount,
+    skipped: skippedCount,
+    mergedDetails,
+  };
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { create } from 'zustand';
 import { Appearance } from 'react-native';
-import { AccentColor, ThemeMode, buildThemeColors, colors } from '@/theme/colors';
+import { AccentColor, ThemeMode, buildThemeColors, colors, getThemeChartShades } from '@/theme/colors';
 import { secureStorage } from '@/lib/storage/secureStorage';
 
 const THEME_MODE_KEY = 'loanledger_theme_mode';
@@ -81,8 +81,13 @@ export function useTheme() {
     return c;
   }, [isDark, accentColor]);
 
+  const chartShades = React.useMemo(() => {
+    return getThemeChartShades(accentColor, isDark);
+  }, [accentColor, isDark]);
+
   return {
     colors: activeColors,
+    chartShades,
     themeMode,
     accentColor,
     isDark,

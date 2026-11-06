@@ -24,7 +24,7 @@ interface AuditLogsViewerProps {
 const PAGE_SIZE = 5;
 
 export function AuditLogsViewer({ logs, isLoading = false }: AuditLogsViewerProps) {
-  const { colors: dynamicColors, isDark } = useTheme();
+  const { colors: dynamicColors, chartShades, isDark } = useTheme();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -174,7 +174,9 @@ export function AuditLogsViewer({ logs, isLoading = false }: AuditLogsViewerProp
               const y = canvasHeight - 16 - barHeight;
 
               const isPeak = d.count === maxCount && d.count > 0;
-              const barColor = isPeak ? dynamicColors.primary : (isDark ? '#4F46E5' : '#818CF8');
+              const barColor = isPeak
+                ? (chartShades[0] || dynamicColors.primary)
+                : (chartShades[2] || (isDark ? '#4F46E5' : '#818CF8'));
 
               return (
                 <G key={d.dateStr}>

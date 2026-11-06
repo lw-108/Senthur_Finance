@@ -31,6 +31,7 @@ import { usePayments } from '@/features/payments/hooks';
 import { Payment } from '@/features/payments/types';
 import { PaymentReceiptModal } from '@/features/payments/components/PaymentReceiptModal';
 import { BorrowerActivityList } from '@/features/customers/components/BorrowerActivityList';
+import { CustomerFinancialBento } from '@/features/customers/components/CustomerFinancialBento';
 import { formatIndianCurrency, maskIdentifier, formatDate } from '@/utils/formatters';
 import { openWhatsApp } from '@/utils/whatsapp';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -132,7 +133,7 @@ export default function CustomerDetailScreen() {
   const handleSaveEdit = async () => {
     if (!customer) return;
     if (!editName.trim()) {
-      showError('Please enter borrower name');
+      showError('Please enter customer name');
       return;
     }
     try {
@@ -150,10 +151,10 @@ export default function CustomerDetailScreen() {
         },
       });
       setEditModalOpen(false);
-      showSuccess('Borrower details updated');
+      showSuccess('Customer details updated');
       refetch();
     } catch {
-      showError('Failed to update borrower');
+      showError('Failed to update customer');
     }
   };
 
@@ -178,7 +179,7 @@ export default function CustomerDetailScreen() {
   if (isLoading) {
     return (
       <Screen>
-        <Header showBack title="Borrower" />
+        <Header showBack title="Customer" />
         <SkeletonLoader height={120} style={{ borderRadius: 20, marginVertical: 12 }} />
         <SkeletonLoader height={70} style={{ borderRadius: 20, marginBottom: 12 }} />
       </Screen>
@@ -192,8 +193,8 @@ export default function CustomerDetailScreen() {
         <EmptyState
           iconName="alert-circle-outline"
           title="Customer Not Found"
-          description="The requested borrower record does not exist or has been removed."
-          actionTitle="Back to Borrowers"
+          description="The requested customer record does not exist or has been removed."
+          actionTitle="Back to Customers"
           onAction={() => router.back()}
         />
       </Screen>
@@ -220,10 +221,10 @@ export default function CustomerDetailScreen() {
         customerId: customer.id,
         updates: { photoUrl: '' },
       });
-      showSuccess('Borrower photo removed');
+      showSuccess('Customer photo removed');
       refetch();
     } catch {
-      showError('Failed to remove borrower photo');
+      showError('Failed to remove customer photo');
     }
   };
 
@@ -231,7 +232,7 @@ export default function CustomerDetailScreen() {
     if (!customer) return;
 
     openPhotoSourcePicker({
-      title: 'Borrower Photo',
+      title: 'Customer Photo',
       hasExistingPhoto: Boolean(customer.photoUrl),
       onPhotoSelected: async (avatarUri) => {
         try {
@@ -239,11 +240,11 @@ export default function CustomerDetailScreen() {
             customerId: customer.id,
             updates: { photoUrl: avatarUri },
           });
-          showSuccess('Borrower photo updated');
+          showSuccess('Customer photo updated');
           refetch();
         } catch (err) {
           console.error('[Customer Photo] Update error:', err);
-          showError('Failed to update borrower photo');
+          showError('Failed to update customer photo');
         }
       },
       onPhotoRemoved: handleRemovePhoto,
@@ -286,7 +287,7 @@ export default function CustomerDetailScreen() {
     <Screen scrollable>
       <Header
         showBack
-        title="Borrower Profile"
+        title="Customer Profile"
         showSupportPill={false}
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
@@ -318,7 +319,7 @@ export default function CustomerDetailScreen() {
           onPress={handlePickPhoto}
           activeOpacity={0.8}
           style={styles.avatarTouchable}
-          accessibilityLabel="Change borrower profile picture"
+          accessibilityLabel="Change customer profile picture"
         >
           <Avatar
             uri={customer.photoUrl}
@@ -354,21 +355,21 @@ export default function CustomerDetailScreen() {
         <TouchableOpacity
           style={[styles.quickActionBtn, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}
           onPress={handleCall}
-          accessibilityLabel="Call borrower"
+          accessibilityLabel="Call customer"
         >
           <Ionicons name="call" size={18} color={dynamicColors.primaryDark} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.quickActionBtn, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}
           onPress={handleWhatsApp}
-          accessibilityLabel="WhatsApp borrower"
+          accessibilityLabel="WhatsApp customer"
         >
           <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.quickActionBtn, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}
           onPress={handleSms}
-          accessibilityLabel="SMS borrower"
+          accessibilityLabel="SMS customer"
         >
           <Ionicons name="chatbubble-outline" size={18} color={dynamicColors.ink} />
         </TouchableOpacity>
@@ -391,58 +392,21 @@ export default function CustomerDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Financial Summary Tiles */}
-      <View style={styles.tilesRow}>
-        <Tile
-          label="Loan Given"
-          value={formatIndianCurrency(computedTotals.totalLent, { isMinorUnit: true }).formatted}
-          iconName="cash-outline"
-        />
-        <Tile
-          label="Balance to Pay"
-          value={formatIndianCurrency(computedTotals.totalOutstanding, { isMinorUnit: true }).formatted}
-          iconName="wallet-outline"
-          iconColor={dynamicColors.primaryDark}
-          iconBgColor={dynamicColors.primarySoft}
-        />
-        <Tile
-          label="Amount Paid"
-          value={formatIndianCurrency(computedTotals.totalPaid, { isMinorUnit: true }).formatted}
-          iconName="checkmark-circle-outline"
-          iconColor={dynamicColors.success}
-          iconBgColor={dynamicColors.successLight}
-        />
-      </View>
-
-      {/* Active Due Repayment Banner */}
-      {computedTotals.totalOutstanding > 0 && (
-        <TouchableOpacity
-          style={[
-            styles.collectDueBanner,
-            { backgroundColor: dynamicColors.boxBackground, borderColor: dynamicColors.boxBorder },
-          ]}
-          activeOpacity={0.85}
-          onPress={() => router.push(`/payments/new?customerId=${customer.id}` as any)}
-        >
-          <View style={styles.bannerLeft}>
-            <View style={[styles.bannerIconWrap, { backgroundColor: dynamicColors.successLight }]}>
-              <Ionicons name="cash" size={20} color={dynamicColors.success} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.bannerDueTitle, { color: dynamicColors.ink }]}>
-                Collect Due Amount
-              </Text>
-              <Text style={[styles.bannerDueSub, { color: dynamicColors.textSecondary }]}>
-                {formatIndianCurrency(computedTotals.totalOutstanding, { isMinorUnit: true }).formatted} pending • Tap to collect payment & bill
-              </Text>
-            </View>
-          </View>
-          <View style={[styles.bannerDueBadge, { backgroundColor: dynamicColors.primary }]}>
-            <Text style={styles.bannerDueBadgeText}>Pay Due</Text>
-            <Ionicons name="arrow-forward" size={13} color="#FFFFFF" />
-          </View>
-        </TouchableOpacity>
-      )}
+      {/* Financial Summary Bento Cards (Flexing, Non-Truncating with Themed Progress Visual) */}
+      <CustomerFinancialBento
+        totalLent={computedTotals.totalLent}
+        totalOutstanding={computedTotals.totalOutstanding}
+        totalPaid={computedTotals.totalPaid}
+        overdueAmount={computedTotals.overdueAmount}
+        activeLoansCount={computedTotals.activeLoans}
+        totalLoansCount={customerLoans?.length || 0}
+        onCollectDue={
+          computedTotals.totalOutstanding > 0
+            ? () => router.push(`/payments/new?customerId=${customer.id}` as any)
+            : undefined
+        }
+        onNewLoan={() => router.push(`/loans/new?customerId=${customer.id}` as any)}
+      />
 
       {/* Detail Tabs */}
       <SegmentedControl
@@ -496,7 +460,7 @@ export default function CustomerDetailScreen() {
               <EmptyState
                 iconName="cash-outline"
                 title="No Loans on Record"
-                description="This borrower does not have any active or past loans yet."
+                description="This customer does not have any active or past loans yet."
               />
             </Card>
           )}
@@ -634,7 +598,7 @@ export default function CustomerDetailScreen() {
               <EmptyState
                 iconName="person-outline"
                 title="No Guarantor Attached"
-                description="This borrower does not have a co-signer on file."
+                description="This customer does not have a co-signer on file."
               />
             )}
           </Card>
@@ -648,17 +612,17 @@ export default function CustomerDetailScreen() {
           onPress={handleToggleBlacklist}
         >
           <Text style={styles.blacklistText}>
-            {customer.status === 'Blacklisted' ? 'Remove from Blacklist' : 'Blacklist Borrower'}
+            {customer.status === 'Blacklisted' ? 'Remove from Blacklist' : 'Blacklist Customer'}
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Edit Borrower Modal */}
+      {/* Edit Customer Modal */}
       <Modal visible={editModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { backgroundColor: dynamicColors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: dynamicColors.ink }]}>Edit Borrower Details</Text>
+              <Text style={[styles.modalTitle, { color: dynamicColors.ink }]}>Edit Customer Details</Text>
               <TouchableOpacity onPress={() => setEditModalOpen(false)}>
                 <Ionicons name="close" size={24} color={dynamicColors.ink} />
               </TouchableOpacity>
@@ -669,7 +633,7 @@ export default function CustomerDetailScreen() {
                 label="Full Name *"
                 value={editName}
                 onChangeText={setEditName}
-                placeholder="Borrower name"
+                placeholder="Customer name"
               />
               <Input
                 label="Mobile Phone *"
@@ -700,7 +664,7 @@ export default function CustomerDetailScreen() {
 
             <View style={{ marginTop: 16 }}>
               <PillButton
-                title="Save Borrower Changes"
+                title="Save Customer Changes"
                 onPress={handleSaveEdit}
                 variant="primary"
                 fullWidth
@@ -713,7 +677,7 @@ export default function CustomerDetailScreen() {
       {/* Confirm Archive Dialog */}
       <ConfirmDialog
         visible={deleteConfirmOpen}
-        title="Archive Borrower?"
+        title="Archive Customer?"
         message={`Are you sure you want to archive ${customer.fullName}? You can restore them from settings later.`}
         isDestructive
         confirmLabel="Archive"

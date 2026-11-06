@@ -74,7 +74,7 @@ export function loanDomainToRow(l: Partial<Loan>, orgId: string, userId?: string
   if (l.loanNumber !== undefined) row.loan_number = l.loanNumber;
   if (l.title !== undefined) row.title = l.title;
   if (l.category !== undefined) row.category = l.category;
-  if (l.principal !== undefined) row.principal_minor_units = l.principal;
+  if (l.principal !== undefined) row.principal_minor_units = Math.round(l.principal);
   if (l.currency !== undefined) row.currency_code = l.currency;
   if (l.interestType !== undefined) row.interest_type = l.interestType;
   if (l.interestRate !== undefined) row.interest_rate = l.interestRate;
@@ -86,9 +86,9 @@ export function loanDomainToRow(l: Partial<Loan>, orgId: string, userId?: string
   if (l.tenure?.value !== undefined) row.tenure_value = l.tenure.value;
   if (l.tenure?.unit !== undefined) row.tenure_unit = l.tenure.unit;
   if (l.maturityDate !== undefined) row.maturity_date = l.maturityDate.split('T')[0];
-  if (l.installmentAmount !== undefined) row.installment_amount_minor_units = l.installmentAmount;
+  if (l.installmentAmount !== undefined) row.installment_amount_minor_units = Math.round(l.installmentAmount);
   if (l.numberOfInstallments !== undefined) row.number_of_installments = l.numberOfInstallments;
-  if (l.upfrontDeduction !== undefined) row.upfront_deduction_minor_units = l.upfrontDeduction;
+  if (l.upfrontDeduction !== undefined) row.upfront_deduction_minor_units = Math.round(l.upfrontDeduction);
   if (l.advanceInterestDeducted !== undefined) row.advance_interest_deducted = l.advanceInterestDeducted;
   if (l.effectiveAnnualRate !== undefined) row.effective_annual_rate = l.effectiveAnnualRate;
   if (l.penalty !== undefined) row.penalty_config = l.penalty;
@@ -96,13 +96,13 @@ export function loanDomainToRow(l: Partial<Loan>, orgId: string, userId?: string
   if (l.proofs !== undefined) row.proofs = l.proofs;
   if (l.witnesses !== undefined) row.witnesses = l.witnesses;
   if (l.status !== undefined) row.status = l.status;
-  if (l.outstandingPrincipal !== undefined) row.outstanding_principal_minor_units = l.outstandingPrincipal;
-  if (l.accruedInterest !== undefined) row.accrued_interest_minor_units = l.accruedInterest;
-  if (l.totalPayable !== undefined) row.total_payable_minor_units = l.totalPayable;
-  if (l.totalPaid !== undefined) row.total_paid_minor_units = l.totalPaid;
+  if (l.outstandingPrincipal !== undefined) row.outstanding_principal_minor_units = Math.round(l.outstandingPrincipal);
+  if (l.accruedInterest !== undefined) row.accrued_interest_minor_units = Math.round(l.accruedInterest);
+  if (l.totalPayable !== undefined) row.total_payable_minor_units = Math.round(l.totalPayable);
+  if (l.totalPaid !== undefined) row.total_paid_minor_units = Math.round(l.totalPaid);
   if (l.nextDueDate !== undefined) row.next_due_date = l.nextDueDate ? l.nextDueDate.split('T')[0] : null;
   if (l.daysOverdue !== undefined) row.days_overdue = l.daysOverdue;
-  if (l.penaltyAccrued !== undefined) row.penalty_accrued_minor_units = l.penaltyAccrued;
+  if (l.penaltyAccrued !== undefined) row.penalty_accrued_minor_units = Math.round(l.penaltyAccrued);
   if (l.progressPercent !== undefined) row.progress_percent = l.progressPercent;
   if (l.closedOn !== undefined) row.closed_on = l.closedOn ? l.closedOn.split('T')[0] : null;
   if (l.notes !== undefined) row.notes = l.notes;
@@ -296,11 +296,11 @@ export async function createLoan(
         const scheduleRows = scheduleInstallments.map((inst, index) => ({
           organization_id: orgId,
           loan_id: domain.id,
-          installment_number: inst.installmentNo || index + 1,
+          installment_number: Math.round(inst.installmentNo || index + 1),
           due_date: (inst.dueDate || now).split('T')[0],
-          principal_due_minor_units: inst.principalDue || 0,
-          interest_due_minor_units: inst.interestDue || 0,
-          total_due_minor_units: inst.totalDue || 0,
+          principal_due_minor_units: Math.round(inst.principalDue || 0),
+          interest_due_minor_units: Math.round(inst.interestDue || 0),
+          total_due_minor_units: Math.round(inst.totalDue || 0),
           status: inst.status || 'PENDING',
         }));
 

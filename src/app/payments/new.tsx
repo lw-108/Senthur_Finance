@@ -24,6 +24,7 @@ import { Payment, PaymentMode } from '@/features/payments/types';
 import { formatIndianCurrency } from '@/utils/formatters';
 import { allocatePaymentWaterfall } from '@/lib/finance';
 import { PaymentReceiptModal } from '@/features/payments/components/PaymentReceiptModal';
+import { usePaymentDraftStore } from '@/features/payments/PaymentDraft';
 
 export default function RecordPaymentScreen() {
   const router = useRouter();
@@ -45,25 +46,43 @@ export default function RecordPaymentScreen() {
     return allActiveLoans;
   }, [allActiveLoans, params.customerId]);
 
-  const [selectedLoanId, setSelectedLoanId] = useState<string>(params.loanId || '');
+  const draft = usePaymentDraftStore();
+
+  // If a loanId was explicitly provided in params, ensure it's selected in the draft
+  React.useEffect(() => {
+    if (params.loanId && params.loanId !== draft.loanId) {
+      draft.setField('loanId', params.loanId);
+    }
+  }, [params.loanId]);
 
   const effectiveSelectedLoanId =
-    selectedLoanId && availableLoans.some((l) => l.id === selectedLoanId)
-      ? selectedLoanId
+    draft.loanId && availableLoans.some((l) => l.id === draft.loanId)
+      ? draft.loanId
       : availableLoans.length > 0
       ? (params.loanId && availableLoans.some((l) => l.id === params.loanId) ? params.loanId : availableLoans[0].id)
       : '';
 
+  const setSelectedLoanId = (id: string) => draft.setField('loanId', id);
+
   const activeLoan = availableLoans.find((l) => l.id === effectiveSelectedLoanId) || availableLoans[0];
 
   const defaultEmi = activeLoan ? Math.round(activeLoan.installmentAmount / 100) : 0;
-  const [amountRupees, setAmountRupees] = useState<number>(0);
-  const effectiveAmountRupees = amountRupees > 0 ? amountRupees : defaultEmi;
+  const effectiveAmountRupees = draft.amountRupees > 0 ? draft.amountRupees : defaultEmi;
 
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
-  const [paidOnDate, setPaidOnDate] = useState<string>(new Date().toISOString());
-  const [referenceNo, setReferenceNo] = useState<string>('');
-  const [notes, setNotes] = useState<string>('');
+  const amountRupees = draft.amountRupees;
+  const setAmountRupees = (val: number) => draft.setField('amountRupees', val);
+
+  const paymentMode = draft.paymentMode || 'CASH';
+  const setPaymentMode = (mode: PaymentMode) => draft.setField('paymentMode', mode);
+
+  const paidOnDate = draft.paidOnDate || new Date().toISOString();
+  const setPaidOnDate = (date: string) => draft.setField('paidOnDate', date);
+
+  const referenceNo = draft.referenceNo || '';
+  const setReferenceNo = (ref: string) => draft.setField('referenceNo', ref);
+
+  const notes = draft.notes || '';
+  const setNotes = (n: string) => draft.setField('notes', n);
 
   // Receipt Modal State after successful payment
   const [recordedPayment, setRecordedPayment] = useState<Payment | null>(null);
@@ -106,7 +125,8 @@ export default function RecordPaymentScreen() {
       showError('Please select a loan account');
       return;
     }
-    if (amountRupees <= 0) {
+    const finalAmountRupees = amountRupees > 0 ? amountRupees : defaultEmi;
+    if (finalAmountRupees <= 0) {
       showError('Enter repayment amount greater than 0');
       return;
     }
@@ -114,12 +134,15 @@ export default function RecordPaymentScreen() {
     try {
       const result = await recordPaymentMutation.mutateAsync({
         loanId: activeLoan.id,
-        amountPaise,
+        amountPaise: Math.round(finalAmountRupees * 100),
         paidOn: paidOnDate,
         mode: paymentMode,
         referenceNo: referenceNo.trim() || undefined,
         notes: notes.trim() || undefined,
       });
+
+      // Clear cached draft upon successful submission to database
+      draft.resetDraft();
 
       showSuccess(`Repayment of ${formatIndianCurrency(amountPaise, { isMinorUnit: true }).formatted} recorded!`);
       setRecordedPayment(result.payment);
@@ -150,7 +173,7 @@ export default function RecordPaymentScreen() {
           title="No Active Loans"
           description={
             params.customerId
-              ? 'This borrower currently has no active or overdue loans.'
+              ? 'This customer currently has no active or overdue loans.'
               : 'There are currently no active or overdue loans to collect repayment for.'
           }
           actionTitle="+ Disburse New Loan"
@@ -171,24 +194,35 @@ export default function RecordPaymentScreen() {
       <DisplayTitle
         title="Record Loan Due"
         subtitle={
-          customer
+          customer?.fullName
             ? `Collect payment from ${customer.fullName}`
-            : activeLoan
+            : activeLoan?.customerName
             ? `${activeLoan.loanNumber} • ${activeLoan.customerName}`
             : 'Admin Loan Due Collection'
         }
       />
 
-      {/* Borrower Account Overview Banner */}
+      {draft.hasDraftData && (draft.amountRupees > 0 || Boolean(draft.referenceNo) || Boolean(draft.notes)) && (
+        <View style={[styles.draftBanner, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
+          <Text style={[styles.draftBannerText, { color: colors.textSecondary }]}>
+            Draft restored from temporary cache
+          </Text>
+          <TouchableOpacity onPress={() => draft.resetDraft()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={[styles.draftClearText, { color: colors.primaryDark }]}>Clear Draft</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Customer Account Overview Banner */}
       <View style={[styles.borrowerBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.bannerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.bannerBorrowerLabel, { color: colors.textSecondary }]}>BORROWER ACCOUNT</Text>
+            <Text style={[styles.bannerBorrowerLabel, { color: colors.textSecondary }]}>CUSTOMER ACCOUNT</Text>
             <Text style={[styles.bannerBorrowerName, { color: colors.ink }]}>
-              {customer?.fullName || activeLoan?.customerName || 'Borrower'}
+              {customer?.fullName || activeLoan?.customerName || 'Customer'}
             </Text>
             <Text style={[styles.bannerBorrowerPhone, { color: colors.textSecondary }]}>
-              +91 {customer?.phone || 'Customer Account'}
+              {customer?.phone ? `+91 ${customer.phone}` : activeLoan?.customerName || 'Customer Account'}
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
@@ -214,7 +248,7 @@ export default function RecordPaymentScreen() {
         }}
         options={loanOptions}
         searchable
-        searchPlaceholder="Search by borrower name or loan number..."
+        searchPlaceholder="Search by customer name or loan number..."
       />
 
       {/* Repayment Amount Input */}
@@ -327,7 +361,7 @@ export default function RecordPaymentScreen() {
 
       <Input
         label="Notes / Receipt Remarks (Optional)"
-        placeholder="e.g. Paid in cash at borrower shop"
+        placeholder="e.g. Paid in cash at customer shop"
         value={notes}
         onChangeText={setNotes}
         leadingIcon="create-outline"
@@ -462,5 +496,23 @@ const styles = StyleSheet.create({
   recordBtn: {
     marginTop: 8,
     marginBottom: 44,
+  },
+  draftBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  draftBannerText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  draftClearText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

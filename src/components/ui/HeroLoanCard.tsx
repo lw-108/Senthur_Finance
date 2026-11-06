@@ -36,49 +36,70 @@ export function HeroLoanCard({
   onPress,
   style,
 }: HeroLoanCardProps) {
-  const { colors: dynamicColors } = useTheme();
+  const { colors: dynamicColors, isDark } = useTheme();
   const isOverdue = daysOverdue > 0;
+
+  // Adapt colors dynamically to active theme mode & accent palette
+  const cardBg = isDark ? dynamicColors.surface : dynamicColors.primarySoft;
+  const cardBorder = isDark ? dynamicColors.border : dynamicColors.primaryBorder;
+  const primaryText = isDark ? '#FFFFFF' : dynamicColors.headingPrimary;
+  const secondaryText = isDark ? dynamicColors.textSecondary : dynamicColors.textMuted;
+  const trackBg = isDark ? 'rgba(255, 255, 255, 0.12)' : dynamicColors.primaryLight;
+  const dividerBorder = isDark ? 'rgba(255, 255, 255, 0.08)' : dynamicColors.primaryBorder;
+  const iconWrapBg = isDark ? 'rgba(255, 255, 255, 0.08)' : dynamicColors.primaryLight;
+  const dueBadgeBg = isDark ? 'rgba(255, 255, 255, 0.1)' : dynamicColors.surface;
+  const dueBadgeBorder = isDark ? 'transparent' : dynamicColors.primaryBorder;
+  const dueBadgeTextColor = isDark ? '#FFFFFF' : dynamicColors.primaryDark;
 
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={!onPress}
       activeOpacity={0.92}
-      style={[styles.container, shadows.hero, style]}
+      style={[
+        styles.container,
+        {
+          backgroundColor: cardBg,
+          borderColor: cardBorder,
+          borderWidth: 1.5,
+        },
+        shadows.card,
+        style,
+      ]}
     >
       {/* Top Header */}
       <View style={styles.topRow}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.loanNumber, { color: dynamicColors.primary }]}>{loanNumber}</Text>
-          <Text style={styles.customerName} numberOfLines={1}>
+          <Text style={[styles.loanNumber, { color: dynamicColors.primaryDark }]}>{loanNumber}</Text>
+          <Text style={[styles.customerName, { color: primaryText }]} numberOfLines={1}>
             {customerName}
           </Text>
-          {location && <Text style={styles.location}>{location}</Text>}
+          {location && <Text style={[styles.location, { color: secondaryText }]}>{location}</Text>}
         </View>
 
         {collateralPhotoUrl ? (
-          <View style={styles.collateralWindow}>
+          <View style={[styles.collateralWindow, { borderColor: cardBorder }]}>
             <Image
               source={{ uri: collateralPhotoUrl }}
               style={styles.collateralImage}
             />
           </View>
         ) : (
-          <View style={styles.shieldIconWrap}>
-            <Ionicons name="shield-checkmark" size={24} color={dynamicColors.primary} />
+          <View style={[styles.shieldIconWrap, { backgroundColor: iconWrapBg }]}>
+            <Ionicons name="shield-checkmark" size={24} color={dynamicColors.primaryDark} />
           </View>
         )}
       </View>
 
       {/* Big Outstanding Amount */}
       <View style={styles.amountSection}>
-        <Text style={styles.amountLabel}>Outstanding Balance</Text>
-        <Text style={styles.outstandingAmount}>{outstandingAmount}</Text>
+        <Text style={[styles.amountLabel, { color: secondaryText }]}>Outstanding Balance</Text>
+        <Text style={[styles.outstandingAmount, { color: primaryText }]}>{outstandingAmount}</Text>
       </View>
 
       {/* Progress Bar */}
       <View style={styles.progressContainer}>
-        <View style={styles.progressTrack}>
+        <View style={[styles.progressTrack, { backgroundColor: trackBg }]}>
           <View
             style={[
               styles.progressBar,
@@ -89,20 +110,20 @@ export function HeroLoanCard({
             ]}
           />
         </View>
-        <Text style={styles.progressLabel}>{Math.round(progressPercent)}% paid</Text>
+        <Text style={[styles.progressLabel, { color: secondaryText }]}>{Math.round(progressPercent)}% paid</Text>
       </View>
 
       {/* Bottom Info Row */}
-      <View style={styles.bottomRow}>
+      <View style={[styles.bottomRow, { borderTopColor: dividerBorder }]}>
         {isOverdue ? (
           <View style={styles.overdueBadge}>
             <Ionicons name="alert-circle" size={14} color="#FFFFFF" />
             <Text style={styles.overdueText}>{daysOverdue} days overdue</Text>
           </View>
         ) : nextDueDate ? (
-          <View style={styles.dueBadge}>
-            <Ionicons name="time-outline" size={14} color={colors.primaryLight} />
-            <Text style={styles.dueText}>Due: {nextDueDate}</Text>
+          <View style={[styles.dueBadge, { backgroundColor: dueBadgeBg, borderColor: dueBadgeBorder, borderWidth: isDark ? 0 : 1 }]}>
+            <Ionicons name="time-outline" size={14} color={dueBadgeTextColor} />
+            <Text style={[styles.dueText, { color: dueBadgeTextColor }]}>Due: {nextDueDate}</Text>
           </View>
         ) : (
           <View />
@@ -110,9 +131,9 @@ export function HeroLoanCard({
 
         {bigStat && (
           <View style={styles.bigStatContainer}>
-            <Text style={styles.bigStatNumber}>{bigStat}</Text>
+            <Text style={[styles.bigStatNumber, { color: primaryText }]}>{bigStat}</Text>
             {bigStatCaption && (
-              <Text style={styles.bigStatCaption}>{bigStatCaption}</Text>
+              <Text style={[styles.bigStatCaption, { color: secondaryText }]}>{bigStatCaption}</Text>
             )}
           </View>
         )}
@@ -123,7 +144,6 @@ export function HeroLoanCard({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.darkCard,
     borderRadius: radii.card,
     padding: 22,
     marginVertical: 10,
@@ -141,21 +161,18 @@ const styles = StyleSheet.create({
   loanNumber: {
     fontFamily: typography.fontHeadline,
     fontSize: 12,
-    color: colors.primary,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   customerName: {
     fontFamily: typography.fontHeadline,
     fontSize: 22,
-    color: colors.onDark,
     marginTop: 2,
     letterSpacing: 0.9,
   },
   location: {
     ...typography.caption,
     fontFamily: typography.fontBody,
-    color: colors.onDarkSecondary,
     marginTop: 2,
   },
   collateralWindow: {
@@ -164,7 +181,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   collateralImage: {
     width: '100%',
@@ -174,7 +190,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -184,13 +199,11 @@ const styles = StyleSheet.create({
   amountLabel: {
     fontFamily: typography.fontBody,
     fontSize: 12,
-    color: colors.onDarkSecondary,
     marginBottom: 4,
   },
   outstandingAmount: {
     fontFamily: typography.fontAmount,
     fontSize: 34,
-    color: colors.onDark,
     letterSpacing: 0.9,
   },
   progressContainer: {
@@ -198,20 +211,17 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     borderRadius: 3,
     overflow: 'hidden',
     marginBottom: 6,
   },
   progressBar: {
     height: '100%',
-    backgroundColor: colors.primary,
     borderRadius: 3,
   },
   progressLabel: {
     fontFamily: typography.fontBody,
     fontSize: 11,
-    color: colors.onDarkSecondary,
     textAlign: 'right',
   },
   bottomRow: {
@@ -220,12 +230,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
   },
   overdueBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.danger,
+    backgroundColor: '#EF4444',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
@@ -239,7 +248,6 @@ const styles = StyleSheet.create({
   dueBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
@@ -247,7 +255,6 @@ const styles = StyleSheet.create({
   },
   dueText: {
     fontFamily: typography.fontBody,
-    color: colors.onDark,
     fontSize: 11,
   },
   bigStatContainer: {
@@ -257,11 +264,9 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontAmount,
     fontSize: 18,
     letterSpacing: 0.8,
-    color: colors.onDark,
   },
   bigStatCaption: {
     fontFamily: typography.fontBody,
     fontSize: 10,
-    color: colors.onDarkSecondary,
   },
 });

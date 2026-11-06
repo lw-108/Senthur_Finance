@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, useWindowDimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import {
   Screen,
   Header,
@@ -22,9 +23,11 @@ import { radii } from '@/theme/spacing';
 import { useTheme } from '@/store/useThemeStore';
 import { useLoanWizardDraft } from '@/features/loans/LoanWizardDraft';
 import { useCreateLoan } from '@/features/loans/hooks';
-import { useCustomers } from '@/features/customers/hooks';
+import { useCustomers, useCreateCustomer } from '@/features/customers/hooks';
 import { useLoanProductsStore } from '@/store/useLoanProductsStore';
 import { formatIndianCurrency } from '@/utils/formatters';
+import { validateIndianPhone, sanitizePhone } from '@/utils/validators';
+import { secureStorage } from '@/lib/storage/secureStorage';
 
 export default function NewLoanScreen() {
   const router = useRouter();
@@ -32,13 +35,38 @@ export default function NewLoanScreen() {
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 375;
   const isTablet = width >= 768;
-  const params = useLocalSearchParams<{ customerId?: string }>();
+  const params = useLocalSearchParams<{ customerId?: string; mode?: string }>();
   const { showSuccess, showError } = useToast();
 
   const draft = useLoanWizardDraft();
   const createLoanMutation = useCreateLoan();
+  const createCustomerMutation = useCreateCustomer();
   const { data: customers } = useCustomers();
   const { products: loanProducts, initialize: initializeProducts } = useLoanProductsStore();
+
+  // Unified all-in-one Customer & Loan State backed by persistent draft cache
+  const customerMode = draft.customerMode || (params.mode === 'new' || (!params.customerId && (!customers || customers.length === 0)) ? 'new' : 'existing');
+  const setCustomerMode = (mode: 'existing' | 'new') => draft.setField('customerMode', mode);
+
+  const newCustomerName = draft.newCustomerName || '';
+  const setNewCustomerName = (val: string) => draft.setField('newCustomerName', val);
+
+  const newCustomerPhone = draft.newCustomerPhone || '';
+  const setNewCustomerPhone = (val: string) => draft.setField('newCustomerPhone', val);
+
+  const newCustomerCity = draft.newCustomerCity || '';
+  const setNewCustomerCity = (val: string) => draft.setField('newCustomerCity', val);
+
+  const newCustomerAddress = draft.newCustomerAddress || '';
+  const setNewCustomerAddress = (val: string) => draft.setField('newCustomerAddress', val);
+
+  const newGuarantorName = draft.newGuarantorName || '';
+  const setNewGuarantorName = (val: string) => draft.setField('newGuarantorName', val);
+
+  const newGuarantorPhone = draft.newGuarantorPhone || '';
+  const setNewGuarantorPhone = (val: string) => draft.setField('newGuarantorPhone', val);
+
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
 
   React.useEffect(() => {
     initializeProducts();
@@ -106,21 +134,106 @@ export default function NewLoanScreen() {
     }
   };
 
-  const next = () => {
+  const next = async () => {
     if (draft.currentStep === 1) {
-      if (!draft.customerId) {
-        showError('Please select a borrower first');
+      if (customerMode === 'new') {
+        if (!newCustomerName || newCustomerName.trim().length < 2) {
+          showError('Please enter customer full name');
+          return;
+        }
+        const phoneVal = validateIndianPhone(newCustomerPhone, {
+          required: true,
+          fieldName: 'Customer mobile phone',
+        });
+        if (!phoneVal.isValid) {
+          showError(phoneVal.error!);
+          return;
+        }
+        const cleanPhone = sanitizePhone(newCustomerPhone);
+
+        if (newGuarantorPhone && newGuarantorPhone.trim().length > 0) {
+          const gPhoneVal = validateIndianPhone(newGuarantorPhone, {
+            required: false,
+            fieldName: 'Guarantor phone',
+          });
+          if (!gPhoneVal.isValid) {
+            showError(gPhoneVal.error!);
+            return;
+          }
+        }
+
+        if (!draft.title && !draft.category) {
+          showError('Please select a loan scheme or purpose');
+          return;
+        }
+
+        try {
+          setIsCreatingCustomer(true);
+          const newCust = await createCustomerMutation.mutateAsync({
+            fullName: newCustomerName.trim(),
+            phone: cleanPhone,
+            address: {
+              line1: newCustomerAddress.trim() || 'Main Road',
+              city: newCustomerCity.trim() || 'Coimbatore',
+              state: 'Tamil Nadu',
+              pincode: '641001',
+            },
+            guarantor: newGuarantorName.trim()
+              ? {
+                  name: newGuarantorName.trim(),
+                  phone: sanitizePhone(newGuarantorPhone),
+                }
+              : undefined,
+            idProofs: [],
+            references: [],
+            tags: ['Customer', draft.category || 'General'],
+            totals: {
+              activeLoans: 0,
+              totalLent: 0,
+              totalOutstanding: 0,
+              totalPaid: 0,
+              overdueAmount: 0,
+            },
+            status: 'Active',
+          });
+
+          draft.setField('customerId', newCust.id);
+          draft.setField('customerName', newCust.fullName);
+          showSuccess(`Customer ${newCust.fullName} added`);
+          draft.setStep(2);
+        } catch (err: any) {
+          showError(err?.message || 'Failed to create customer profile');
+        } finally {
+          setIsCreatingCustomer(false);
+        }
         return;
-      }
-      if (!draft.title && !draft.category) {
-        showError('Please select a loan scheme or purpose');
-        return;
+      } else {
+        if (!draft.customerId) {
+          showError('Please select a customer first');
+          return;
+        }
+        if (!draft.title && !draft.category) {
+          showError('Please select a loan scheme or purpose');
+          return;
+        }
       }
     }
     if (draft.currentStep === 2) {
       if (!draft.principalPaise || draft.principalPaise <= 0) {
         showError('Please enter a valid loan principal amount');
         return;
+      }
+    }
+    if (draft.currentStep === 4) {
+      if (draft.witnessPhone && draft.witnessPhone.trim().length > 0) {
+        const wVal = validateIndianPhone(draft.witnessPhone, {
+          required: false,
+          fieldName: 'Witness phone',
+        });
+        if (!wVal.isValid) {
+          showError(wVal.error!);
+          return;
+        }
       }
     }
     if (draft.currentStep < 5) {
@@ -134,6 +247,7 @@ export default function NewLoanScreen() {
     if (draft.currentStep > 1) {
       draft.setStep(draft.currentStep - 1);
     } else {
+      // Preserve filled form draft when user leaves or switches apps
       router.back();
     }
   };
@@ -141,7 +255,7 @@ export default function NewLoanScreen() {
   const handleConfirmDisburse = async () => {
     try {
       if (!draft.customerId) {
-        showError('Please select a valid borrower before disbursing');
+        showError('Please select a valid customer before disbursing');
         draft.setStep(1);
         return;
       }
@@ -204,6 +318,7 @@ export default function NewLoanScreen() {
 
       showSuccess(`Loan ${loanNumber} disbursed to ${draft.customerName}!`);
       draft.resetDraft();
+      await secureStorage.setItem('loanledger_last_active_route', '/');
       router.back();
     } catch (e: any) {
       showError(e?.message || 'Failed to disburse loan');
@@ -229,7 +344,7 @@ export default function NewLoanScreen() {
         totalSteps={5}
         stepTitle={
           draft.currentStep === 1
-            ? 'Borrower'
+            ? 'Customer'
             : draft.currentStep === 2
             ? 'Amount & Rate'
             : draft.currentStep === 3
@@ -251,22 +366,143 @@ export default function NewLoanScreen() {
         }
       />
 
-      {/* STEP 1: Select Customer & Purpose */}
+      {/* STEP 1: Select or Create Customer & Purpose */}
       {draft.currentStep === 1 && (
         <View style={styles.stepContainer}>
           <DisplayTitle
-            title="Borrower & Purpose"
-            subtitle="Choose customer and specify the loan purpose"
+            title="Customer & Purpose"
+            subtitle="Select an existing customer or fill up a new profile"
           />
 
-          <SelectModal
-            label="Select Borrower *"
-            selectedValue={draft.customerId}
-            onSelect={handleSelectCustomer}
-            options={customerOptions}
-            searchable
-            searchPlaceholder="Search borrower by name, phone or city..."
-          />
+          {/* Customer Selection / New Customer Segmented Switch */}
+          <View style={[styles.modeSelectorWrap, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
+            <TouchableOpacity
+              style={[
+                styles.modeTab,
+                customerMode === 'existing' && [
+                  styles.modeTabActive,
+                  { backgroundColor: colors.surface, borderColor: colors.primaryBorder },
+                ],
+              ]}
+              onPress={() => setCustomerMode('existing')}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="people-outline"
+                size={16}
+                color={customerMode === 'existing' ? colors.primaryDark : colors.textTertiary}
+              />
+              <Text
+                style={[
+                  styles.modeTabText,
+                  { color: customerMode === 'existing' ? colors.headingPrimary : colors.textSecondary },
+                ]}
+              >
+                Existing Customer
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modeTab,
+                customerMode === 'new' && [
+                  styles.modeTabActive,
+                  { backgroundColor: colors.surface, borderColor: colors.primaryBorder },
+                ],
+              ]}
+              onPress={() => setCustomerMode('new')}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="person-add-outline"
+                size={16}
+                color={customerMode === 'new' ? colors.primaryDark : colors.textTertiary}
+              />
+              <Text
+                style={[
+                  styles.modeTabText,
+                  { color: customerMode === 'new' ? colors.headingPrimary : colors.textSecondary },
+                ]}
+              >
+                + New Customer
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {customerMode === 'existing' ? (
+            <SelectModal
+              label="Select Customer *"
+              selectedValue={draft.customerId}
+              onSelect={handleSelectCustomer}
+              options={customerOptions}
+              searchable
+              searchPlaceholder="Search customer by name, phone or city..."
+            />
+          ) : (
+            <Card
+              variant="surface"
+              style={[
+                styles.newCustomerCard,
+                { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
+              ]}
+            >
+              <Text style={[styles.sectionSubtitle, { color: colors.primaryDark }]}>
+                NEW CUSTOMER DETAILS
+              </Text>
+
+              <Input
+                label="Customer Full Name *"
+                placeholder="e.g. Ramesh Kumar"
+                value={newCustomerName}
+                onChangeText={setNewCustomerName}
+                leadingIcon="person-outline"
+              />
+
+              <Input
+                label="Mobile Phone (Strictly 10 Digits) *"
+                placeholder="10-digit mobile number"
+                keyboardType="phone-pad"
+                maxLength={10}
+                value={newCustomerPhone}
+                onChangeText={(val) => setNewCustomerPhone(sanitizePhone(val))}
+                leadingIcon="call-outline"
+              />
+
+              <Input
+                label="Address Line"
+                placeholder="Street / Area / Door No."
+                value={newCustomerAddress}
+                onChangeText={setNewCustomerAddress}
+                leadingIcon="home-outline"
+              />
+
+              <Input
+                label="City / Town"
+                placeholder="e.g. Coimbatore"
+                value={newCustomerCity}
+                onChangeText={setNewCustomerCity}
+                leadingIcon="location-outline"
+              />
+
+              <Input
+                label="Guarantor Name (Optional)"
+                placeholder="e.g. Suresh"
+                value={newGuarantorName}
+                onChangeText={setNewGuarantorName}
+                leadingIcon="people-outline"
+              />
+
+              <Input
+                label="Guarantor Phone (10 Digits)"
+                placeholder="10-digit number"
+                keyboardType="phone-pad"
+                maxLength={10}
+                value={newGuarantorPhone}
+                onChangeText={(val) => setNewGuarantorPhone(sanitizePhone(val))}
+                leadingIcon="call-outline"
+              />
+            </Card>
+          )}
 
           <SelectModal
             label="Loan Product & Scheme *"
@@ -313,31 +549,26 @@ export default function NewLoanScreen() {
             ]}
           />
 
-          <View style={styles.row}>
-            <View style={styles.col}>
-              <Input
-                label="Interest Rate (%) *"
-                placeholder="2"
-                keyboardType="numeric"
-                value={draft.interestRate.toString()}
-                onChangeText={(val) => draft.setField('interestRate', parseFloat(val) || 0)}
-                leadingIcon="trending-up-outline"
-              />
-            </View>
-            <View style={styles.col}>
-              <SelectModal
-                label="Rate Period *"
-                selectedValue={draft.ratePeriod}
-                onSelect={(val) => draft.setField('ratePeriod', val as any)}
-                options={[
-                  { label: '% per Month (e.g. ₹2 Vaddi)', value: 'PER_MONTH' },
-                  { label: '% per Year (Annual)', value: 'PER_YEAR' },
-                  { label: '% per Week', value: 'PER_WEEK' },
-                  { label: '% per Day', value: 'PER_DAY' },
-                ]}
-              />
-            </View>
-          </View>
+          <Input
+            label="Interest Rate (%) *"
+            placeholder="e.g. 2"
+            keyboardType="numeric"
+            value={draft.interestRate.toString()}
+            onChangeText={(val) => draft.setField('interestRate', parseFloat(val) || 0)}
+            leadingIcon="trending-up-outline"
+          />
+
+          <SelectModal
+            label="Rate Period *"
+            selectedValue={draft.ratePeriod}
+            onSelect={(val) => draft.setField('ratePeriod', val as any)}
+            options={[
+              { label: '% per Month (e.g. ₹2 Vaddi)', value: 'PER_MONTH' },
+              { label: '% per Year (Annual)', value: 'PER_YEAR' },
+              { label: '% per Week', value: 'PER_WEEK' },
+              { label: '% per Day', value: 'PER_DAY' },
+            ]}
+          />
 
           <Input
             label="File Charges / Deductions (₹)"
@@ -360,31 +591,26 @@ export default function NewLoanScreen() {
             subtitle="Repayment cycle and duration"
           />
 
-          <View style={styles.row}>
-            <View style={styles.col}>
-              <Input
-                label="Duration *"
-                placeholder="12"
-                keyboardType="numeric"
-                value={draft.tenureValue.toString()}
-                onChangeText={(val) => draft.setField('tenureValue', parseInt(val, 10) || 1)}
-                leadingIcon="calendar-outline"
-              />
-            </View>
-            <View style={styles.col}>
-              <SelectModal
-                label="Unit *"
-                selectedValue={draft.tenureUnit}
-                onSelect={(val) => draft.setField('tenureUnit', val as any)}
-                options={[
-                  { label: 'Months', value: 'MONTHS' },
-                  { label: 'Weeks', value: 'WEEKS' },
-                  { label: 'Days (Daily)', value: 'DAYS' },
-                  { label: 'Years', value: 'YEARS' },
-                ]}
-              />
-            </View>
-          </View>
+          <Input
+            label="Duration *"
+            placeholder="12"
+            keyboardType="numeric"
+            value={draft.tenureValue.toString()}
+            onChangeText={(val) => draft.setField('tenureValue', parseInt(val, 10) || 1)}
+            leadingIcon="calendar-outline"
+          />
+
+          <SelectModal
+            label="Unit *"
+            selectedValue={draft.tenureUnit}
+            onSelect={(val) => draft.setField('tenureUnit', val as any)}
+            options={[
+              { label: 'Months', value: 'MONTHS' },
+              { label: 'Weeks', value: 'WEEKS' },
+              { label: 'Days (Daily)', value: 'DAYS' },
+              { label: 'Years', value: 'YEARS' },
+            ]}
+          />
 
           <SelectModal
             label="Due Collection Schedule *"
@@ -481,26 +707,21 @@ export default function NewLoanScreen() {
             </>
           )}
 
-          <View style={styles.row}>
-            <View style={styles.col}>
-              <Input
-                label="Overdue Grace Days"
-                placeholder="3"
-                keyboardType="numeric"
-                value={draft.graceDays.toString()}
-                onChangeText={(val) => draft.setField('graceDays', parseInt(val, 10) || 0)}
-              />
-            </View>
-            <View style={styles.col}>
-              <Input
-                label="Penalty (₹/day)"
-                placeholder="50"
-                keyboardType="numeric"
-                value={(draft.penaltyValue / 100).toString()}
-                onChangeText={(val) => draft.setField('penaltyValue', (parseInt(val, 10) || 0) * 100)}
-              />
-            </View>
-          </View>
+          <Input
+            label="Overdue Grace Days"
+            placeholder="3"
+            keyboardType="numeric"
+            value={draft.graceDays.toString()}
+            onChangeText={(val) => draft.setField('graceDays', parseInt(val, 10) || 0)}
+          />
+
+          <Input
+            label="Penalty (₹/day)"
+            placeholder="50"
+            keyboardType="numeric"
+            value={(draft.penaltyValue / 100).toString()}
+            onChangeText={(val) => draft.setField('penaltyValue', (parseInt(val, 10) || 0) * 100)}
+          />
 
           <Input
             label="Witness Name"
@@ -508,6 +729,16 @@ export default function NewLoanScreen() {
             value={draft.witnessName}
             onChangeText={(val) => draft.setField('witnessName', val)}
             leadingIcon="people-outline"
+          />
+
+          <Input
+            label="Witness Phone (10 Digits)"
+            placeholder="e.g. 9876543210"
+            keyboardType="phone-pad"
+            maxLength={10}
+            value={draft.witnessPhone}
+            onChangeText={(val) => draft.setField('witnessPhone', sanitizePhone(val))}
+            leadingIcon="call-outline"
           />
         </View>
       )}
@@ -532,7 +763,7 @@ export default function NewLoanScreen() {
 
           <Card variant="surface" style={[styles.confirmCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
             <View style={styles.summaryItemRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Borrower:</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Customer:</Text>
               <Text style={[styles.summaryValue, { color: colors.ink }]}>{draft.customerName}</Text>
             </View>
             <View style={styles.summaryItemRow}>
@@ -595,7 +826,7 @@ export default function NewLoanScreen() {
           iconName={draft.currentStep === 5 ? 'checkmark-circle' : 'arrow-forward'}
           iconPosition="right"
           onPress={next}
-          loading={createLoanMutation.isPending}
+          loading={createLoanMutation.isPending || isCreatingCustomer}
           variant="primary"
           size={isTablet ? 'md' : 'sm'}
           style={draft.currentStep === 1 ? styles.fullBtn : styles.continueBtn}
@@ -609,6 +840,46 @@ export default function NewLoanScreen() {
 const styles = StyleSheet.create({
   stepContainer: {
     marginVertical: 10,
+  },
+  modeSelectorWrap: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 4,
+    marginBottom: 16,
+    gap: 6,
+  },
+  modeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  modeTabActive: {
+    borderWidth: 1,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+  },
+  modeTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  newCustomerCard: {
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+  },
+  sectionSubtitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginBottom: 12,
   },
   row: {
     flexDirection: 'row',
@@ -656,7 +927,7 @@ const styles = StyleSheet.create({
   footerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
     marginTop: 24,
     marginBottom: 44,
     width: '100%',
@@ -667,21 +938,23 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     flex: 1,
-    minWidth: 0,
-    minHeight: 46,
-    maxWidth: 110,
-    paddingHorizontal: 12,
+    height: 48,
+    minHeight: 48,
+    maxHeight: 48,
+    paddingHorizontal: 10,
   },
   continueBtn: {
-    flex: 3,
-    minWidth: 0,
-    minHeight: 46,
+    flex: 1.6,
+    height: 48,
+    minHeight: 48,
+    maxHeight: 48,
     paddingHorizontal: 12,
   },
   fullBtn: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 46,
+    width: '100%',
+    height: 48,
+    minHeight: 48,
+    maxHeight: 48,
   },
   btnTextSmall: {
     fontSize: 12,

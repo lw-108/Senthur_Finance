@@ -24,8 +24,17 @@ import { useCreateCustomer } from '@/features/customers/hooks';
 import { checkDuplicatePhone } from '@/features/customers/api';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLoanProductsStore } from '@/store/useLoanProductsStore';
-import { KYCDocumentPicker } from '@/features/customers/components/KYCDocumentPicker';
+import { KYCDocumentPicker, isPdfDocument } from '@/features/customers/components/KYCDocumentPicker';
 import { IdProofType } from '@/features/customers/types';
+import { secureStorage } from '@/lib/storage/secureStorage';
+import {
+  validateIndianPhone,
+  sanitizePhone,
+  validatePincode,
+  sanitizePincode,
+  validateKYCDocument,
+  sanitizeKYCDocument,
+} from '@/utils/validators';
 
 export default function NewCustomerScreen() {
   const router = useRouter();
@@ -57,13 +66,17 @@ export default function NewCustomerScreen() {
   const validateStep1 = async (): Promise<boolean> => {
     const errors: Record<string, string> = {};
     if (!draft.fullName || draft.fullName.trim().length < 2) {
-      errors.fullName = 'Full name must be at least 2 characters';
+      errors.fullName = 'Full legal name must be at least 2 characters';
     }
 
-    const cleanPhone = draft.phone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      errors.phone = 'Enter valid 10-digit mobile number';
+    const phoneValidation = validateIndianPhone(draft.phone, {
+      required: true,
+      fieldName: 'Mobile number',
+    });
+    if (!phoneValidation.isValid) {
+      errors.phone = phoneValidation.error!;
     } else {
+      const cleanPhone = sanitizePhone(draft.phone);
       // Check duplicate phone in background
       const dup = await checkDuplicatePhone(adminUid, cleanPhone);
       if (dup) {
@@ -73,22 +86,66 @@ export default function NewCustomerScreen() {
       }
     }
 
+    if (draft.altPhone && draft.altPhone.trim().length > 0) {
+      const altPhoneVal = validateIndianPhone(draft.altPhone, {
+        required: false,
+        fieldName: 'Alternate contact number',
+      });
+      if (!altPhoneVal.isValid) {
+        errors.altPhone = altPhoneVal.error!;
+      }
+    }
+
     setStepErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const validateStep2 = (): boolean => {
     const errors: Record<string, string> = {};
-    if (draft.address.pincode && draft.address.pincode.trim().length > 0 && draft.address.pincode.trim().length !== 6) {
-      errors.pincode = 'Enter valid 6-digit pincode';
+    if (!draft.address.line1 || draft.address.line1.trim().length < 2) {
+      errors.line1 = 'Address Line 1 is required';
     }
+    if (!draft.address.city || draft.address.city.trim().length < 2) {
+      errors.city = 'City / town is required';
+    }
+
+    const pinRes = validatePincode(draft.address.pincode, { required: true });
+    if (!pinRes.isValid) {
+      errors.pincode = pinRes.error!;
+    }
+
     setStepErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const validateStep3 = (): boolean => {
-    // KYC proofs optional during initial creation
-    return true;
+    const errors: Record<string, string> = {};
+    draft.idProofs.forEach((proof, idx) => {
+      if (proof && proof.number && proof.number.trim().length > 0) {
+        const docRes = validateKYCDocument(proof.type, proof.number, { required: false });
+        if (!docRes.isValid) {
+          errors[`idProofNumber_${idx}`] = docRes.error!;
+          if (idx === 0) errors.idProofNumber = docRes.error!;
+        }
+      }
+    });
+    setStepErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const validateStep4 = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (draft.guarantor.phone && draft.guarantor.phone.trim().length > 0) {
+      const gPhoneRes = validateIndianPhone(draft.guarantor.phone, {
+        required: false,
+        fieldName: 'Guarantor phone',
+      });
+      if (!gPhoneRes.isValid) {
+        errors.guarantorPhone = gPhoneRes.error!;
+      }
+    }
+    setStepErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleQuickSaveFromStep1 = async () => {
@@ -99,15 +156,15 @@ export default function NewCustomerScreen() {
 
   const handlePickPhoto = () => {
     openPhotoSourcePicker({
-      title: 'Borrower Profile Photo',
+      title: 'Customer Profile Photo',
       hasExistingPhoto: Boolean(draft.photoUrl),
       onPhotoSelected: (avatarUri) => {
         draft.setField('photoUrl', avatarUri);
-        showSuccess('Borrower photo attached');
+        showSuccess('Customer photo attached');
       },
       onPhotoRemoved: () => {
         draft.setField('photoUrl', '');
-        showSuccess('Borrower photo removed');
+        showSuccess('Customer photo removed');
       },
       onError: showError,
     });
@@ -125,6 +182,7 @@ export default function NewCustomerScreen() {
       if (!validateStep3()) return;
       draft.setStep(4);
     } else if (draft.currentStep === 4) {
+      if (!validateStep4()) return;
       draft.setStep(5);
     } else if (draft.currentStep === 5) {
       saveCustomer();
@@ -135,6 +193,7 @@ export default function NewCustomerScreen() {
     if (draft.currentStep > 1) {
       draft.setStep(draft.currentStep - 1);
     } else {
+      // Preserve temporary filled form data in local cache
       router.back();
     }
   };
@@ -152,8 +211,8 @@ export default function NewCustomerScreen() {
       await createCustomerMutation.mutateAsync({
         fullName: draft.fullName.trim(),
         nickname: draft.nickname || undefined,
-        phone: draft.phone.replace(/\D/g, '').slice(-10),
-        altPhone: draft.altPhone || undefined,
+        phone: sanitizePhone(draft.phone),
+        altPhone: draft.altPhone ? sanitizePhone(draft.altPhone) : undefined,
         email: draft.email || undefined,
         occupation: draft.occupation || undefined,
         monthlyIncome: draft.monthlyIncome ? draft.monthlyIncome * 100 : undefined,
@@ -161,8 +220,14 @@ export default function NewCustomerScreen() {
         address: cleanAddress,
         idProofs: draft.idProofs || [],
         references: draft.references || [],
-        guarantor: draft.guarantor.name ? draft.guarantor : undefined,
-        tags: draft.tags?.length > 0 ? draft.tags : ['Borrower'],
+        guarantor: draft.guarantor.name
+          ? {
+              name: draft.guarantor.name.trim(),
+              phone: draft.guarantor.phone ? sanitizePhone(draft.guarantor.phone) : '',
+              address: draft.guarantor.address || '',
+            }
+          : undefined,
+        tags: draft.tags?.length > 0 ? draft.tags : ['Customer'],
         notes: draft.notes || undefined,
         rating: 5,
         creditScoreInternal: 80,
@@ -178,6 +243,7 @@ export default function NewCustomerScreen() {
 
       showSuccess(`${draft.fullName} added successfully!`);
       draft.resetDraft();
+      await secureStorage.setItem('loanledger_last_active_route', '/');
       router.back();
     } catch (e: any) {
       showError(e?.message || 'Failed to save customer');
@@ -189,7 +255,7 @@ export default function NewCustomerScreen() {
       <Header
         showBack
         onBack={prevStep}
-        title="New Borrower"
+        title="New Customer"
         showSupportPill={false}
       />
 
@@ -224,7 +290,7 @@ export default function NewCustomerScreen() {
       {draft.currentStep === 1 && (
         <View style={styles.stepContainer}>
           <DisplayTitle
-            title="Borrower Details"
+            title="Customer Details"
             subtitle="Enter primary identification and contact numbers"
           />
 
@@ -234,18 +300,18 @@ export default function NewCustomerScreen() {
             </View>
           )}
 
-          {/* Borrower Profile Photo Capture & Upload */}
+          {/* Customer Profile Photo Capture & Upload */}
           <View style={styles.photoUploadSection}>
             <TouchableOpacity
               onPress={handlePickPhoto}
               activeOpacity={0.8}
               style={styles.avatarTouchable}
               accessibilityRole="button"
-              accessibilityLabel="Upload borrower photo"
+              accessibilityLabel="Upload customer photo"
             >
               <Avatar
                 uri={draft.photoUrl}
-                name={draft.fullName || 'Borrower'}
+                name={draft.fullName || 'Customer'}
                 size={76}
                 borderColor={colors.primary}
                 backgroundColor={colors.primaryLight}
@@ -256,13 +322,13 @@ export default function NewCustomerScreen() {
               </View>
             </TouchableOpacity>
             <Text style={[styles.photoHelperText, { color: colors.textSecondary }]}>
-              {draft.photoUrl ? 'Tap photo to change or remove' : 'Tap to take borrower photo (Camera / Gallery)'}
+              {draft.photoUrl ? 'Tap photo to change or remove' : 'Tap to take customer photo (Camera / Gallery)'}
             </Text>
           </View>
 
           <Input
             label="Full Legal Name *"
-            placeholder="Enter borrower full name"
+            placeholder="Enter customer full name"
             value={draft.fullName}
             onChangeText={(val) => draft.setField('fullName', val)}
             error={stepErrors.fullName}
@@ -270,21 +336,36 @@ export default function NewCustomerScreen() {
           />
 
           <Input
-            label="Mobile Number (Primary / WhatsApp) *"
+            label="Mobile Number (Strictly 10 Digits) *"
             placeholder="e.g. 9876543210"
             keyboardType="phone-pad"
+            maxLength={10}
             value={draft.phone}
-            onChangeText={(val) => draft.setField('phone', val)}
+            onChangeText={(val) => {
+              const cleaned = sanitizePhone(val);
+              draft.setField('phone', cleaned);
+              if (stepErrors.phone) {
+                setStepErrors((prev) => ({ ...prev, phone: '' }));
+              }
+            }}
             error={stepErrors.phone}
             leadingIcon="call-outline"
           />
 
           <Input
-            label="Alternate Contact Number"
+            label="Alternate Contact Number (10 Digits)"
             placeholder="e.g. 9443210987"
             keyboardType="phone-pad"
+            maxLength={10}
             value={draft.altPhone}
-            onChangeText={(val) => draft.setField('altPhone', val)}
+            onChangeText={(val) => {
+              const cleaned = sanitizePhone(val);
+              draft.setField('altPhone', cleaned);
+              if (stepErrors.altPhone) {
+                setStepErrors((prev) => ({ ...prev, altPhone: '' }));
+              }
+            }}
+            error={stepErrors.altPhone}
             leadingIcon="call-outline"
           />
 
@@ -314,7 +395,7 @@ export default function NewCustomerScreen() {
         </View>
       )}
 
-      {/* STEP 2: Address */}
+      {/* STEP 2: Address (Single Column Layout) */}
       {draft.currentStep === 2 && (
         <View style={styles.stepContainer}>
           <DisplayTitle
@@ -326,9 +407,12 @@ export default function NewCustomerScreen() {
             label="Address Line 1 (Door / Building / Street) *"
             placeholder="Enter street name, building or door no."
             value={draft.address.line1}
-            onChangeText={(val) =>
-              draft.setField('address', { ...draft.address, line1: val })
-            }
+            onChangeText={(val) => {
+              draft.setField('address', { ...draft.address, line1: val });
+              if (stepErrors.line1) {
+                setStepErrors((prev) => ({ ...prev, line1: '' }));
+              }
+            }}
             error={stepErrors.line1}
             leadingIcon="home-outline"
           />
@@ -337,100 +421,212 @@ export default function NewCustomerScreen() {
             label="City / Town *"
             placeholder="Enter city or town"
             value={draft.address.city}
-            onChangeText={(val) =>
-              draft.setField('address', { ...draft.address, city: val })
-            }
+            onChangeText={(val) => {
+              draft.setField('address', { ...draft.address, city: val });
+              if (stepErrors.city) {
+                setStepErrors((prev) => ({ ...prev, city: '' }));
+              }
+            }}
             error={stepErrors.city}
             leadingIcon="location-outline"
           />
 
-          <View style={styles.row}>
-            <View style={styles.col}>
-              <Input
-                label="State"
-                value={draft.address.state}
-                onChangeText={(val) =>
-                  draft.setField('address', { ...draft.address, state: val })
-                }
-              />
-            </View>
-            <View style={styles.col}>
-              <Input
-                label="Pincode *"
-                placeholder="641012"
-                keyboardType="numeric"
-                value={draft.address.pincode}
-                onChangeText={(val) =>
-                  draft.setField('address', { ...draft.address, pincode: val })
-                }
-                error={stepErrors.pincode}
-              />
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* STEP 3: KYC Proofs */}
-      {draft.currentStep === 3 && (
-        <View style={styles.stepContainer}>
-          <DisplayTitle
-            title="ID Proofs (Aadhaar / Voter / PAN)"
-            subtitle="Photo of Aadhaar card, PAN card or Voter ID"
-          />
-
-          <SelectModal
-            label="ID Card Type *"
-            selectedValue={draft.idProofs[0]?.type || 'Aadhaar'}
-            onSelect={(val) => {
-              const updated = [...draft.idProofs];
-              updated[0] = { ...updated[0], type: val as IdProofType };
-              draft.setField('idProofs', updated);
-            }}
-            options={[
-              { label: 'Aadhaar Card (12 Digits)', value: 'Aadhaar', icon: 'card-outline' },
-              { label: 'PAN Card (ABCDE1234F)', value: 'PAN', icon: 'document-text-outline' },
-              { label: 'Voter ID Card', value: 'Voter', icon: 'finger-print-outline' },
-              { label: 'Driving License', value: 'DrivingLicense', icon: 'car-outline' },
-              { label: 'Passport', value: 'Passport', icon: 'globe-outline' },
-            ]}
+          <Input
+            label="State"
+            placeholder="Tamil Nadu"
+            value={draft.address.state}
+            onChangeText={(val) =>
+              draft.setField('address', { ...draft.address, state: val })
+            }
+            leadingIcon="map-outline"
           />
 
           <Input
-            label="ID / Card Number *"
-            placeholder={
-              draft.idProofs[0]?.type === 'Aadhaar'
-                ? 'e.g. 12-digit Aadhaar'
-                : 'e.g. 10-char PAN'
-            }
-            value={draft.idProofs[0]?.number || ''}
+            label="Pincode (Strictly 6 Digits) *"
+            placeholder="e.g. 641001"
+            keyboardType="numeric"
+            maxLength={6}
+            value={draft.address.pincode}
             onChangeText={(val) => {
-              const updated = [...draft.idProofs];
-              updated[0] = { ...updated[0], number: val };
-              draft.setField('idProofs', updated);
+              const cleaned = sanitizePincode(val);
+              draft.setField('address', { ...draft.address, pincode: cleaned });
+              if (stepErrors.pincode) {
+                setStepErrors((prev) => ({ ...prev, pincode: '' }));
+              }
             }}
-            error={stepErrors.idProofNumber}
-            leadingIcon="keypad-outline"
-          />
-
-          <KYCDocumentPicker
-            label="Front & Back Document Photo"
-            frontUri={draft.idProofs[0]?.frontUrl}
-            backUri={draft.idProofs[0]?.backUrl}
-            onChangeFront={(uri) => {
-              const updated = [...draft.idProofs];
-              updated[0] = { ...updated[0], frontUrl: uri };
-              draft.setField('idProofs', updated);
-            }}
-            onChangeBack={(uri) => {
-              const updated = [...draft.idProofs];
-              updated[0] = { ...updated[0], backUrl: uri };
-              draft.setField('idProofs', updated);
-            }}
+            error={stepErrors.pincode}
+            leadingIcon="navigate-outline"
           />
         </View>
       )}
 
-      {/* STEP 4: Guarantor & References */}
+      {/* STEP 3: KYC Proofs (Camera Photos, Gallery Images & PDF Documents) */}
+      {draft.currentStep === 3 && (
+        <View style={styles.stepContainer}>
+          <DisplayTitle
+            title="ID Proofs (Aadhaar, PAN, Voter, Ration Card)"
+            subtitle="Capture camera photo, choose gallery image or upload PDF document"
+          />
+
+          {draft.idProofs.map((proof, index) => {
+            const errKey = `idProofNumber_${index}`;
+            const errorMsg = stepErrors[errKey] || (index === 0 ? stepErrors.idProofNumber : '');
+
+            return (
+              <Card
+                key={proof.id || index}
+                variant="surface"
+                style={{
+                  marginBottom: 16,
+                  padding: 16,
+                  borderRadius: radii.card,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  backgroundColor: colors.surface,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ionicons name="shield-checkmark-outline" size={20} color={colors.primaryDark} />
+                    <Text style={{ fontFamily: typography.fontHeadline, fontSize: 14, fontWeight: '700', color: colors.ink }}>
+                      ID Proof #{index + 1} • {proof.type || 'Document'}
+                    </Text>
+                  </View>
+                  {draft.idProofs.length > 1 && (
+                    <TouchableOpacity
+                      onPress={() => draft.removeIdProof(proof.id)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={{ padding: 4 }}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <SelectModal
+                  label="ID Card Type *"
+                  selectedValue={proof.type || 'Aadhaar'}
+                  onSelect={(val) => {
+                    const updated = [...draft.idProofs];
+                    updated[index] = { ...updated[index], type: val as IdProofType, number: '' };
+                    draft.setField('idProofs', updated);
+                    setStepErrors((prev) => ({ ...prev, [errKey]: '', idProofNumber: '' }));
+                  }}
+                  options={[
+                    { label: 'Aadhaar Card (12 Digits)', value: 'Aadhaar', icon: 'card-outline' },
+                    { label: 'PAN Card (ABCDE1234F - 10 Chars)', value: 'PAN', icon: 'document-text-outline' },
+                    { label: 'Voter ID Card (10 Chars)', value: 'Voter', icon: 'finger-print-outline' },
+                    { label: 'Driving License', value: 'DrivingLicense', icon: 'car-outline' },
+                    { label: 'Ration Card (Smart Card / Family Card)', value: 'RationCard', icon: 'receipt-outline' },
+                    { label: 'Passport (8 Chars)', value: 'Passport', icon: 'globe-outline' },
+                    { label: 'Other Government / Property Proof', value: 'Other', icon: 'document-attach-outline' },
+                  ]}
+                />
+
+                <Input
+                  label={
+                    proof.type === 'Aadhaar'
+                      ? 'Aadhaar Number (Strictly 12 Digits)'
+                      : proof.type === 'PAN'
+                      ? 'PAN Number (Strictly 10 Characters)'
+                      : `${proof.type || 'ID'} Number`
+                  }
+                  placeholder={
+                    proof.type === 'Aadhaar'
+                      ? 'e.g. 12-digit Aadhaar (123456789012)'
+                      : proof.type === 'PAN'
+                      ? 'e.g. ABCDE1234F'
+                      : 'Enter ID proof number'
+                  }
+                  keyboardType={proof.type === 'Aadhaar' ? 'numeric' : 'default'}
+                  autoCapitalize="characters"
+                  maxLength={
+                    proof.type === 'Aadhaar'
+                      ? 12
+                      : proof.type === 'PAN'
+                      ? 10
+                      : proof.type === 'Passport'
+                      ? 8
+                      : 16
+                  }
+                  value={proof.number || ''}
+                  onChangeText={(val) => {
+                    const cleaned = sanitizeKYCDocument(proof.type || 'Aadhaar', val);
+                    const updated = [...draft.idProofs];
+                    updated[index] = { ...updated[index], number: cleaned };
+                    draft.setField('idProofs', updated);
+                    if (stepErrors[errKey] || stepErrors.idProofNumber) {
+                      setStepErrors((prev) => ({ ...prev, [errKey]: '', idProofNumber: '' }));
+                    }
+                  }}
+                  error={errorMsg}
+                  leadingIcon="keypad-outline"
+                />
+
+                <KYCDocumentPicker
+                  label={`${proof.type || 'Document'} Proof (Camera, Image or PDF)`}
+                  frontUri={proof.frontUrl}
+                  backUri={proof.backUrl}
+                  hasBackSide={proof.type !== 'PAN'}
+                  onChangeFront={(uri) => {
+                    const updated = [...draft.idProofs];
+                    updated[index] = { ...updated[index], frontUrl: uri };
+                    draft.setField('idProofs', updated);
+                  }}
+                  onChangeBack={(uri) => {
+                    const updated = [...draft.idProofs];
+                    updated[index] = { ...updated[index], backUrl: uri };
+                    draft.setField('idProofs', updated);
+                  }}
+                />
+              </Card>
+            );
+          })}
+
+          {/* Add Another ID Proof Button */}
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingVertical: 13,
+              paddingHorizontal: 16,
+              borderRadius: radii.sm + 4,
+              borderWidth: 1.5,
+              borderStyle: 'dashed',
+              borderColor: colors.primaryDark,
+              backgroundColor: colors.primarySoft,
+              gap: 8,
+              marginTop: 4,
+              marginBottom: 14,
+            }}
+            onPress={() => {
+              const typesInUse = draft.idProofs.map((p) => p.type);
+              const nextType: IdProofType = !typesInUse.includes('PAN')
+                ? 'PAN'
+                : !typesInUse.includes('Voter')
+                ? 'Voter'
+                : !typesInUse.includes('RationCard')
+                ? 'RationCard'
+                : 'Other';
+
+              draft.addIdProof({
+                id: `proof-${Date.now()}`,
+                type: nextType,
+                number: '',
+                verified: false,
+              });
+            }}
+          >
+            <Ionicons name="add-circle-outline" size={20} color={colors.primaryDark} />
+            <Text style={{ fontFamily: typography.fontHeadline, fontSize: 13, fontWeight: '700', color: colors.primaryDark }}>
+              + Add Another ID Proof (e.g. PAN, Voter, Ration Card)
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* STEP 4: Guarantor & References (Single Column Layout) */}
       {draft.currentStep === 4 && (
         <View style={styles.stepContainer}>
           <DisplayTitle
@@ -449,13 +645,19 @@ export default function NewCustomerScreen() {
           />
 
           <Input
-            label="Guarantor Phone"
+            label="Guarantor Phone (Strictly 10 Digits)"
             placeholder="e.g. 9443210987"
             keyboardType="phone-pad"
+            maxLength={10}
             value={draft.guarantor.phone}
-            onChangeText={(val) =>
-              draft.setField('guarantor', { ...draft.guarantor, phone: val })
-            }
+            onChangeText={(val) => {
+              const cleaned = sanitizePhone(val);
+              draft.setField('guarantor', { ...draft.guarantor, phone: cleaned });
+              if (stepErrors.guarantorPhone) {
+                setStepErrors((prev) => ({ ...prev, guarantorPhone: '' }));
+              }
+            }}
+            error={stepErrors.guarantorPhone}
             leadingIcon="call-outline"
           />
 
@@ -476,7 +678,7 @@ export default function NewCustomerScreen() {
         <View style={styles.stepContainer}>
           <DisplayTitle
             title="Review Profile"
-            subtitle="Verify borrower information before creating profile"
+            subtitle="Verify customer information before creating profile"
           />
 
           <Card variant="surface" style={[styles.reviewCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
@@ -491,12 +693,34 @@ export default function NewCustomerScreen() {
 
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>KYC Document:</Text>
-              <Text style={[styles.summaryValue, { color: colors.ink }]}>
-                {draft.idProofs[0]?.type} ({draft.idProofs[0]?.number ? '••••' + draft.idProofs[0]?.number.slice(-4) : 'Pending'})
-              </Text>
-            </View>
+            {draft.idProofs.map((p, idx) => (
+              <View key={p.id || idx} style={styles.summaryRow}>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+                  {p.type} Proof:
+                </Text>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={[styles.summaryValue, { color: colors.ink }]}>
+                    {p.number ? '••••' + p.number.slice(-4) : 'Pending'}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 4, marginTop: 3 }}>
+                    {p.frontUrl ? (
+                      <Badge
+                        variant="subtle"
+                        status="info"
+                        label={isPdfDocument(p.frontUrl) ? 'Front: PDF' : 'Front: Photo'}
+                      />
+                    ) : null}
+                    {p.backUrl ? (
+                      <Badge
+                        variant="subtle"
+                        status="info"
+                        label={isPdfDocument(p.backUrl) ? 'Back: PDF' : 'Back: Photo'}
+                      />
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            ))}
 
             {draft.guarantor.name && (
               <View style={styles.summaryRow}>
@@ -558,7 +782,7 @@ export default function NewCustomerScreen() {
               ? 'Guarantor'
               : draft.currentStep === 4
               ? 'Review & Save'
-              : 'Save Borrower'
+              : 'Save Customer'
           }
           iconName={draft.currentStep === 5 ? 'checkmark-circle' : 'arrow-forward'}
           iconPosition="right"

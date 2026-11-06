@@ -17,14 +17,19 @@ import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 import { secureStorage } from '@/lib/storage/secureStorage';
 import { AccentColor, ThemeMode, ACCENT_PALETTES } from '@/theme/colors';
 import { typography } from '@/theme/typography';
-import { Input, PillButton, useToast } from '@/components/ui';
+import { Input } from '@/components/ui/Input';
+import { PillButton } from '@/components/ui/PillButton';
+import { PinCodeInput } from '@/components/ui/PinCodeInput';
+import { useToast } from '@/components/ui/Toast';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export const SETUP_COMPLETED_KEY = 'loanledger_setup_completed';
 
 export async function isSetupCompleted(): Promise<boolean> {
   try {
     const val = await secureStorage.getItem(SETUP_COMPLETED_KEY);
-    return val === 'true';
+    const pin = await secureStorage.getItem('loanledger_user_pin');
+    return val === 'true' && Boolean(pin);
   } catch {
     return false;
   }
@@ -63,9 +68,15 @@ export function InitialSetupModal({
   const { business, updateBusinessProfile } = useBusinessSettingsStore();
   const { showSuccess, showError } = useToast();
 
+  const { hasPinSet, setupPin } = useAuthStore();
+
   const [orgName, setOrgName] = useState(business.businessName || '');
   const [selectedTheme, setSelectedTheme] = useState<ThemeMode>(themeMode);
   const [selectedAccent, setSelectedAccent] = useState<AccentColor>(accentColor);
+
+  const [appPin, setAppPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinError, setPinError] = useState('');
 
   const [contactsGranted, setContactsGranted] = useState(false);
   const [cameraGranted, setCameraGranted] = useState(false);
@@ -78,6 +89,12 @@ export function InitialSetupModal({
       setSelectedTheme(themeMode);
       setSelectedAccent(accentColor);
       checkExistingPermissions();
+      secureStorage.getItem('loanledger_user_pin').then((p) => {
+        if (p && /^\d{4}$/.test(p)) {
+          setAppPin(p);
+          setConfirmPin(p);
+        }
+      });
     }
   }, [visible, business.businessName, themeMode, accentColor]);
 
@@ -173,6 +190,22 @@ export function InitialSetupModal({
   };
 
   const handleSaveAndContinue = async () => {
+    setPinError('');
+
+    // 1. Mandatory 4-digit PIN lock validation (First and most important!)
+    if (!appPin || appPin.length !== 4 || !/^\d{4}$/.test(appPin)) {
+      setPinError('A 4-digit security PIN lock is mandatory to protect organization ledgers.');
+      showError('4-digit security PIN is required');
+      return;
+    }
+
+    if (appPin !== confirmPin) {
+      setPinError('PIN confirmation does not match');
+      showError('PIN confirmation does not match');
+      return;
+    }
+
+    // 2. Organization name validation
     const trimmed = orgName.trim();
     if (!trimmed) {
       showError('Please enter an organization name');
@@ -181,8 +214,16 @@ export function InitialSetupModal({
 
     try {
       setIsSaving(true);
-      // 1. Update business organization name across app
-      await updateBusinessProfile({ businessName: trimmed });
+
+      // Save 4-digit App Lock PIN to local storage AND Supabase DB
+      await setupPin(appPin);
+
+      // 1. Update business organization name & security profile across app & DB
+      await updateBusinessProfile({
+        businessName: trimmed,
+        security_pin: appPin,
+        has_pin_lock: true,
+      });
 
       // 2. Ensure theme settings are saved
       await setThemeMode(selectedTheme);
@@ -191,7 +232,7 @@ export function InitialSetupModal({
       // 3. Mark setup as completed in secure storage
       await setSetupCompleted(true);
 
-      showSuccess(`${trimmed} setup saved successfully!`);
+      showSuccess(`${trimmed} setup and security PIN saved successfully!`);
       onComplete();
     } catch {
       showError('Failed to save setup');
@@ -199,6 +240,11 @@ export function InitialSetupModal({
       setIsSaving(false);
     }
   };
+
+  const isPinComplete = appPin.length === 4;
+  const isConfirmComplete = confirmPin.length === 4;
+  const doPinsMatch = isPinComplete && isConfirmComplete && appPin === confirmPin;
+  const doPinsMismatch = isPinComplete && isConfirmComplete && appPin !== confirmPin;
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={canDismiss ? onComplete : undefined}>
@@ -213,24 +259,111 @@ export function InitialSetupModal({
         >
           {/* Header Badge & Title */}
           <View style={styles.headerArea}>
-            <View>
-              <Text style={[styles.subtitle, { color: dynamicColors.primaryDark }]}>INITIAL APP SETUP</Text>
+            <View style={[styles.badge, { backgroundColor: dynamicColors.primarySoft, borderColor: dynamicColors.primaryBorder }]}>
+              <Ionicons name="shield-checkmark" size={13} color={dynamicColors.primaryDark} />
+              <Text style={[styles.badgeText, { color: dynamicColors.primaryDark }]}>ORGANIZATION & SECURITY SETUP</Text>
             </View>
 
-            <Text style={[styles.mainTitle, { color: dynamicColors.ink }]}>Setup Your Workspace</Text>
+            <Text style={[styles.mainTitle, { color: dynamicColors.ink }]}>Setup Organization & Security</Text>
             <Text style={[styles.subtitle, { color: dynamicColors.textSecondary }]}>
-              Configure your organization branding, visual style, and permissions. You can change these anytime in Settings.
+              Configure your mandatory 4-digit security PIN lock, company branding, and visual theme. Your security auth is saved to both local storage and cloud database.
             </Text>
           </View>
 
-          {/* 1. Organization Name */}
+          {/* 1. 4-Digit Security PIN Lock (MANDATORY & MOST IMPORTANT) */}
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: dynamicColors.surface,
+                borderColor: doPinsMatch ? '#059669' : dynamicColors.primary,
+                borderWidth: 1.5,
+              },
+            ]}
+          >
+            <View style={styles.cardHeaderRow}>
+              <View style={[styles.iconBox, { backgroundColor: dynamicColors.primarySoft }]}>
+                <Ionicons name="lock-closed" size={18} color={dynamicColors.primaryDark} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Text style={[styles.cardTitle, { color: dynamicColors.ink }]}>1. 4-Digit Security PIN Lock</Text>
+                  <View style={[styles.requiredBadge, { backgroundColor: '#FEF2F2', borderColor: '#F87171' }]}>
+                    <Ionicons name="shield-half" size={11} color="#DC2626" />
+                    <Text style={[styles.requiredBadgeText, { color: '#DC2626' }]}>REQUIRED • CRITICAL</Text>
+                  </View>
+                </View>
+                <Text style={[styles.cardDescription, { color: dynamicColors.textSecondary }]}>
+                  Essential security lock. Protects all loan accounts, borrower KYC data, and daily collections. Stored in encrypted device storage and synced to cloud database.
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ marginTop: 14 }}>
+              <PinCodeInput
+                label="Enter 4-Digit Security PIN *"
+                value={appPin}
+                onChangeValue={(val) => {
+                  setAppPin(val);
+                  setPinError('');
+                }}
+                length={4}
+                secure
+              />
+            </View>
+
+            <View style={{ marginTop: 12 }}>
+              <PinCodeInput
+                label="Confirm 4-Digit Security PIN *"
+                value={confirmPin}
+                onChangeValue={(val) => {
+                  setConfirmPin(val);
+                  setPinError('');
+                }}
+                length={4}
+                secure
+                error={pinError}
+              />
+            </View>
+
+            {doPinsMatch && (
+              <View style={[styles.pinMatchBadge, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={[styles.pinMatchText, { color: '#059669' }]}>
+                  4-digit security PIN verified and matching!
+                </Text>
+              </View>
+            )}
+
+            {doPinsMismatch && (
+              <View style={[styles.pinMatchBadge, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+                <Ionicons name="alert-circle" size={16} color="#DC2626" />
+                <Text style={[styles.pinMatchText, { color: '#DC2626' }]}>
+                  PIN confirmation does not match. Please verify.
+                </Text>
+              </View>
+            )}
+
+            {!doPinsMatch && !doPinsMismatch && (
+              <Text style={[styles.pinHint, { color: dynamicColors.textTertiary }]}>
+                Mandatory: Enter 4 numeric digits (e.g. 8887). This PIN will be required to unlock and manage transactions.
+              </Text>
+            )}
+          </View>
+
+          {/* 2. Organization Name */}
           <View style={[styles.card, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}>
             <View style={styles.cardHeaderRow}>
               <View style={[styles.iconBox, { backgroundColor: dynamicColors.primarySoft }]}>
                 <Ionicons name="business" size={18} color={dynamicColors.primaryDark} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: dynamicColors.ink }]}>Organization Name</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Text style={[styles.cardTitle, { color: dynamicColors.ink }]}>2. Organization & Business Name</Text>
+                  <View style={[styles.requiredBadge, { backgroundColor: dynamicColors.primarySoft, borderColor: dynamicColors.primary }]}>
+                    <Text style={[styles.requiredBadgeText, { color: dynamicColors.primaryDark }]}>REQUIRED</Text>
+                  </View>
+                </View>
                 <Text style={[styles.cardDescription, { color: dynamicColors.textSecondary }]}>
                   Reflected across all loan agreements, statements, receipts & WhatsApp greetings.
                 </Text>
@@ -254,14 +387,14 @@ export function InitialSetupModal({
             />
           </View>
 
-          {/* 2. App Theme Mode */}
+          {/* 3. App Theme Mode */}
           <View style={[styles.card, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}>
             <View style={styles.cardHeaderRow}>
               <View style={[styles.iconBox, { backgroundColor: dynamicColors.primarySoft }]}>
                 <Ionicons name="contrast-outline" size={18} color={dynamicColors.primaryDark} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: dynamicColors.ink }]}>App Theme Mode</Text>
+                <Text style={[styles.cardTitle, { color: dynamicColors.ink }]}>3. App Theme Mode</Text>
                 <Text style={[styles.cardDescription, { color: dynamicColors.textSecondary }]}>
                   Choose your preferred appearance mode.
                 </Text>
@@ -309,14 +442,14 @@ export function InitialSetupModal({
             </View>
           </View>
 
-          {/* 3. Color Theme Accent */}
+          {/* 4. Color Theme Accent */}
           <View style={[styles.card, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}>
             <View style={styles.cardHeaderRow}>
               <View style={[styles.iconBox, { backgroundColor: dynamicColors.primarySoft }]}>
                 <Ionicons name="color-palette-outline" size={18} color={dynamicColors.primaryDark} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: dynamicColors.ink }]}>Color Theme</Text>
+                <Text style={[styles.cardTitle, { color: dynamicColors.ink }]}>4. Color Theme</Text>
                 <Text style={[styles.cardDescription, { color: dynamicColors.textSecondary }]}>
                   Select your primary accent branding color.
                 </Text>
@@ -359,14 +492,14 @@ export function InitialSetupModal({
             </View>
           </View>
 
-          {/* 4. App Permissions */}
+          {/* 5. Device Permissions (Optional) */}
           <View style={[styles.card, { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border }]}>
             <View style={styles.cardHeaderRow}>
               <View style={[styles.iconBox, { backgroundColor: dynamicColors.primarySoft }]}>
                 <Ionicons name="shield-checkmark-outline" size={18} color={dynamicColors.primaryDark} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: dynamicColors.ink }]}>Required Permissions</Text>
+                <Text style={[styles.cardTitle, { color: dynamicColors.ink }]}>5. Device Permissions (Optional)</Text>
                 <Text style={[styles.cardDescription, { color: dynamicColors.textSecondary }]}>
                   Enable permissions to import borrowers and manage verification documents.
                 </Text>
@@ -648,5 +781,40 @@ const styles = StyleSheet.create({
   cancelText: {
     ...typography.caption,
     fontSize: 13,
+  },
+  pinHint: {
+    ...typography.caption,
+    fontSize: 12,
+    marginTop: 8,
+  },
+  requiredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  requiredBadgeText: {
+    fontFamily: typography.fontHeadline,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  pinMatchBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 10,
+  },
+  pinMatchText: {
+    fontFamily: typography.fontHeadline,
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
 });

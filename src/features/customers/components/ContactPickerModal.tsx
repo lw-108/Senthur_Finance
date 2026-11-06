@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import * as Contacts from 'expo-contacts';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +17,9 @@ import { useTheme } from '@/store/useThemeStore';
 import { typography } from '@/theme/typography';
 import { radii } from '@/theme/spacing';
 import { Input, useToast } from '@/components/ui';
-import { useBatchMergeContacts } from '@/features/customers/hooks';
+import { useBatchMergeContacts, useCustomers } from '@/features/customers/hooks';
+import { ContactMergeStrategy, Customer } from '@/features/customers/types';
+import { normalizePhone, matchesCustomerPhone } from '@/lib/phone/normalizePhone';
 
 interface ContactPickerModalProps {
   visible: boolean;
@@ -28,7 +31,11 @@ interface ParsedContact {
   id: string;
   name: string;
   phone: string;
+  allPhones: string[];
   displayPhone: string;
+  email?: string;
+  company?: string;
+  matchedCustomer?: Customer | null;
 }
 
 export function ContactPickerModal({
@@ -39,22 +46,17 @@ export function ContactPickerModal({
   const { colors: dynamicColors, isDark } = useTheme();
   const { showSuccess, showError } = useToast();
   const batchMergeMutation = useBatchMergeContacts();
+  const { data: existingCustomers } = useCustomers();
 
   const [contacts, setContacts] = useState<ParsedContact[]>([]);
   const [selectedMap, setSelectedMap] = useState<Map<string, ParsedContact>>(new Map());
+  const [strategy, setStrategy] = useState<ContactMergeStrategy>('MERGE_INTO_EXISTING');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [previewModalVisible, setPreviewModalVisible] = useState(false);
 
   const isWeb = Platform.OS === 'web';
-
-  const cleanPhoneDigits = (raw: string): string => {
-    const digits = raw.replace(/\D/g, '');
-    if (digits.length >= 10) {
-      return digits.slice(-10);
-    }
-    return digits;
-  };
 
   const loadContacts = useCallback(async () => {
     if (isWeb) {
@@ -80,6 +82,8 @@ export function ContactPickerModal({
             Contacts.Fields.Name,
             Contacts.Fields.FirstName,
             Contacts.Fields.LastName,
+            Contacts.Fields.Emails,
+            Contacts.Fields.Company,
           ],
           sort: Contacts.SortTypes.FirstName,
         });
@@ -98,20 +102,46 @@ export function ContactPickerModal({
               'Unknown Contact'
             );
 
+            // Collect all valid phone numbers for this contact
+            const validPhones: string[] = [];
+            let displayPrimary = '';
+
             for (const p of item.phoneNumbers) {
               const rawNum = p.number?.trim() || '';
-              const digits10 = cleanPhoneDigits(rawNum);
-
-              if (digits10.length === 10 && !seenPhones.has(digits10)) {
-                seenPhones.add(digits10);
-                parsedList.push({
-                  id: item.id ? `${item.id}-${digits10}` : `${name}-${digits10}`,
-                  name,
-                  phone: digits10,
-                  displayPhone: `+91 ${digits10.slice(0, 5)} ${digits10.slice(5)}`,
-                });
-                break; // One primary number per contact
+              const norm = normalizePhone(rawNum, 'IN');
+              if (norm.isValid || norm.digits10.length >= 10) {
+                if (!validPhones.includes(norm.digits10)) {
+                  validPhones.push(norm.digits10);
+                }
+                if (!displayPrimary) {
+                  displayPrimary = norm.formatted;
+                }
               }
+            }
+
+            if (validPhones.length === 0) continue;
+            const primaryPhone = validPhones[0];
+
+            if (!seenPhones.has(primaryPhone)) {
+              seenPhones.add(primaryPhone);
+
+              // Check if matching customer exists in ledger
+              const matched = (existingCustomers || []).find((cust) =>
+                !cust.isDeleted && validPhones.some((vp) => matchesCustomerPhone(vp, cust))
+              );
+
+              const emailVal = item.emails && item.emails.length > 0 ? item.emails[0].email : undefined;
+
+              parsedList.push({
+                id: item.id ? `${item.id}-${primaryPhone}` : `${name}-${primaryPhone}`,
+                name,
+                phone: primaryPhone,
+                allPhones: validPhones,
+                displayPhone: displayPrimary || `+91 ${primaryPhone.slice(0, 5)} ${primaryPhone.slice(5)}`,
+                email: emailVal,
+                company: (item as any).company,
+                matchedCustomer: matched || null,
+              });
             }
           }
 
@@ -128,7 +158,7 @@ export function ContactPickerModal({
     } finally {
       setLoading(false);
     }
-  }, [isWeb]);
+  }, [isWeb, existingCustomers]);
 
   const handleClose = () => {
     setSelectedMap(new Map());
@@ -155,7 +185,10 @@ export function ContactPickerModal({
     if (!search.trim()) return contacts;
     const s = search.toLowerCase().trim();
     return contacts.filter(
-      (c) => c.name.toLowerCase().includes(s) || c.phone.includes(s)
+      (c) =>
+        c.name.toLowerCase().includes(s) ||
+        c.phone.includes(s) ||
+        c.allPhones.some((p) => p.includes(s))
     );
   }, [contacts, search]);
 
@@ -181,34 +214,69 @@ export function ContactPickerModal({
     }
   };
 
-  // Quick single-save as borrower
+  // Quick single-save as customer with active strategy
   const handleQuickSaveSingle = async (item: ParsedContact) => {
     try {
-      await batchMergeMutation.mutateAsync([{ name: item.name, phone: item.phone }]);
-      showSuccess(`Saved "${item.name}" to your borrowers list!`);
+      const res = await batchMergeMutation.mutateAsync({
+        contacts: [{
+          name: item.name,
+          phone: item.phone,
+          allPhones: item.allPhones,
+          email: item.email,
+        }],
+        strategy,
+      });
+
+      if (res.updated > 0) {
+        showSuccess(`Merged "${item.name}" into existing customer!`);
+      } else {
+        showSuccess(`Saved "${item.name}" as new customer!`);
+      }
       onClose();
-    } catch {
-      showError('Failed to save contact as borrower');
+    } catch (err: any) {
+      showError(err?.message || 'Failed to save contact');
     }
   };
 
-  // Batch merge selected contacts
+  // Batch merge selected contacts with active strategy
   const handleBatchMerge = async () => {
     const list = Array.from(selectedMap.values()).map((c) => ({
       name: c.name,
       phone: c.phone,
+      allPhones: c.allPhones,
+      email: c.email,
     }));
     if (list.length === 0) return;
 
     try {
-      const res = await batchMergeMutation.mutateAsync(list);
-      showSuccess(`Merged ${res.added + res.updated} contact${list.length !== 1 ? 's' : ''} into your borrowers list!`);
+      const res = await batchMergeMutation.mutateAsync({
+        contacts: list,
+        strategy,
+      });
+
+      showSuccess(
+        `Imported ${list.length} contact${list.length !== 1 ? 's' : ''}: ${res.added} created, ${res.updated} merged!`
+      );
       setSelectedMap(new Map());
       onClose();
-    } catch {
-      showError('Failed to merge contacts');
+    } catch (err: any) {
+      showError(err?.message || 'Failed to merge contacts');
     }
   };
+
+  // Count preview for selected contacts
+  const selectedCounts = useMemo(() => {
+    let matched = 0;
+    let fresh = 0;
+    selectedMap.forEach((c) => {
+      if (c.matchedCustomer) {
+        matched++;
+      } else {
+        fresh++;
+      }
+    });
+    return { matched, fresh, total: selectedMap.size };
+  }, [selectedMap]);
 
   return (
     <Modal
@@ -347,6 +415,62 @@ export function ContactPickerModal({
             )}
           </View>
 
+          {/* Merge Strategy Selector */}
+          <View style={styles.strategySection}>
+            <View style={styles.strategyHeader}>
+              <Text style={[styles.strategyLabel, { color: dynamicColors.textSecondary }]}>
+                MERGE STRATEGY
+              </Text>
+              <Text style={[styles.strategyHint, { color: dynamicColors.primary }]} numberOfLines={1}>
+                {strategy === 'MERGE_INTO_EXISTING' && 'Smart Merge: keep existing, union phones'}
+                {strategy === 'FILL_EMPTY_ONLY' && 'Fill Empty: only fill missing blank fields'}
+                {strategy === 'OVERWRITE' && 'Overwrite: update details with contact info'}
+                {strategy === 'CREATE_NEW' && 'Always New: create fresh customer record'}
+              </Text>
+            </View>
+            <View style={styles.strategyRow}>
+              {(
+                [
+                  { id: 'MERGE_INTO_EXISTING', label: 'Smart Merge' },
+                  { id: 'FILL_EMPTY_ONLY', label: 'Fill Empty' },
+                  { id: 'OVERWRITE', label: 'Overwrite' },
+                  { id: 'CREATE_NEW', label: 'Always New' },
+                ] as const
+              ).map((opt) => {
+                const isActive = strategy === opt.id;
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    onPress={() => setStrategy(opt.id)}
+                    style={[
+                      styles.strategyChip,
+                      {
+                        backgroundColor: isActive
+                          ? dynamicColors.primary
+                          : isDark
+                          ? 'rgba(255, 255, 255, 0.08)'
+                          : dynamicColors.surfaceMuted,
+                        borderColor: isActive ? dynamicColors.primary : dynamicColors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.strategyChipText,
+                        {
+                          color: isActive ? '#FFFFFF' : dynamicColors.ink,
+                          fontWeight: isActive ? '700' : '500',
+                        },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           {/* Body Content */}
           {loading ? (
             <View style={styles.centerBox}>
@@ -404,6 +528,28 @@ export function ContactPickerModal({
                   {isWeb ? 'Close' : 'Allow Access'}
                 </Text>
               </TouchableOpacity>
+              {!isWeb && (
+                <TouchableOpacity
+                  style={[
+                    styles.settingsBtn,
+                    {
+                      borderColor: dynamicColors.border,
+                      marginTop: 10,
+                    },
+                  ]}
+                  onPress={() => Linking.openSettings()}
+                >
+                  <Ionicons
+                    name="settings-outline"
+                    size={16}
+                    color={dynamicColors.ink}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.settingsBtnText, { color: dynamicColors.ink }]}>
+                    Open Device Settings
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : filtered.length === 0 ? (
             <View style={styles.centerBox}>
@@ -492,18 +638,43 @@ export function ContactPickerModal({
                       onPress={() => toggleSelect(item)}
                       activeOpacity={0.7}
                     >
-                      <Text
-                        style={[
-                          styles.name,
-                          {
-                            color: dynamicColors.ink,
-                            fontFamily: typography.fontHeadline,
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {item.name}
-                      </Text>
+                      <View style={styles.nameRow}>
+                        <Text
+                          style={[
+                            styles.name,
+                            {
+                              color: dynamicColors.ink,
+                              fontFamily: typography.fontHeadline,
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.name}
+                        </Text>
+                        {item.matchedCustomer && (
+                          <View
+                            style={[
+                              styles.matchedBadge,
+                              {
+                                backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : '#EEF2FF',
+                                borderColor: isDark ? 'rgba(99, 102, 241, 0.4)' : '#C7D2FE',
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.matchedBadgeText,
+                                {
+                                  color: dynamicColors.primary,
+                                },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              Matches: {item.matchedCustomer.fullName}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                       <Text
                         style={[
                           styles.phone,
@@ -515,6 +686,7 @@ export function ContactPickerModal({
                         numberOfLines={1}
                       >
                         {item.displayPhone}
+                        {item.allPhones.length > 1 ? ` (+${item.allPhones.length - 1} more)` : ''}
                       </Text>
                     </TouchableOpacity>
 
@@ -532,7 +704,9 @@ export function ContactPickerModal({
                         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
                         <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-                        <Text style={styles.quickSaveBtnText}>Save</Text>
+                        <Text style={styles.quickSaveBtnText}>
+                          {item.matchedCustomer && strategy !== 'CREATE_NEW' ? 'Merge' : 'Save'}
+                        </Text>
                       </TouchableOpacity>
 
                       {/* Open Full Wizard */}
@@ -574,12 +748,16 @@ export function ContactPickerModal({
                 },
               ]}
             >
-              <View>
+              <View style={{ flex: 1, marginRight: 12 }}>
                 <Text style={[styles.bottomBarCount, { color: dynamicColors.ink }]}>
                   {selectedMap.size} Selected
                 </Text>
-                <Text style={[styles.bottomBarSub, { color: dynamicColors.textSecondary }]}>
-                  Ready to add to borrowers
+                <Text style={[styles.bottomBarSub, { color: dynamicColors.textSecondary }]} numberOfLines={1}>
+                  {strategy === 'CREATE_NEW'
+                    ? 'All will be created as new'
+                    : selectedCounts.matched > 0
+                    ? `${selectedCounts.fresh} new, ${selectedCounts.matched} merge into existing`
+                    : 'All will be created as new'}
                 </Text>
               </View>
 
@@ -598,9 +776,9 @@ export function ContactPickerModal({
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <Ionicons name="person-add" size={16} color="#FFFFFF" />
+                    <Ionicons name="people" size={16} color="#FFFFFF" />
                     <Text style={styles.mergeBatchBtnText}>
-                      Save {selectedMap.size} to Borrowers
+                      Apply ({selectedMap.size})
                     </Text>
                   </>
                 )}
@@ -710,6 +888,76 @@ const styles = StyleSheet.create({
   },
   selectAllText: {
     fontSize: 12,
+    fontWeight: '700',
+  },
+  strategySection: {
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  strategyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  strategyLabel: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  strategyHint: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 8,
+  },
+  strategyRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  strategyChip: {
+    flex: 1,
+    paddingVertical: 7,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  strategyChipText: {
+    fontSize: 11,
+    textAlign: 'center',
+  },
+  settingsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  settingsBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  matchedBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    borderWidth: 0.8,
+  },
+  matchedBadgeText: {
+    fontSize: 10,
     fontWeight: '700',
   },
   listContent: {

@@ -8,8 +8,15 @@ import {
   softDeleteCustomer,
   bulkDeleteCustomers,
   batchMergePhoneContacts,
+  mergeExistingCustomers,
 } from './api';
-import { Customer, CustomerFilterParams } from './types';
+import {
+  Customer,
+  CustomerFilterParams,
+  ContactMergeStrategy,
+  BatchMergeContactInput,
+  MergeStrategyResult,
+} from './types';
 import { AUDIT_LOGS_QUERY_KEY } from '@/features/audit/hooks';
 
 export const CUSTOMERS_QUERY_KEY = 'customers';
@@ -93,11 +100,41 @@ export function useBatchMergeContacts() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (contacts: { name: string; phone: string }[]) =>
-      batchMergePhoneContacts(adminUid, contacts),
+    mutationFn: ({
+      contacts,
+      strategy = 'MERGE_INTO_EXISTING',
+    }: {
+      contacts: BatchMergeContactInput[];
+      strategy?: ContactMergeStrategy;
+    }) => batchMergePhoneContacts(adminUid, contacts, strategy),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CUSTOMERS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: [AUDIT_LOGS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+    },
+  });
+}
+
+export function useMergeExistingCustomers() {
+  const adminUid = useAuthStore((s) => s.adminUid);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      sourceCustomerId,
+      targetCustomerId,
+      strategy = 'MERGE_INTO_EXISTING',
+    }: {
+      sourceCustomerId: string;
+      targetCustomerId: string;
+      strategy?: ContactMergeStrategy;
+    }) => mergeExistingCustomers(adminUid, sourceCustomerId, targetCustomerId, strategy),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CUSTOMERS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [AUDIT_LOGS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
     },
   });
 }

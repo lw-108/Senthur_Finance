@@ -60,11 +60,15 @@ export default function SettingsScreen() {
     setLockEnabled,
     isBiometricAvailable,
     isBiometricEnabled,
+    biometricTypeLabel,
+    biometricIconName,
     setBiometricEnabled,
     setupPin,
     signOut,
     setUserPassword,
     updatePhotoURL,
+    sessionTimeoutMinutes,
+    setSessionTimeoutMinutes,
   } = useAuthStore();
 
   const permanentAvatar = usePermanentAvatar();
@@ -98,8 +102,24 @@ export default function SettingsScreen() {
   const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [sessionTimeoutModalVisible, setSessionTimeoutModalVisible] = useState(false);
   const [signOutConfirmVisible, setSignOutConfirmVisible] = useState(false);
   const [setupWizardVisible, setSetupWizardVisible] = useState(false);
+
+  const formatTimeoutMinutes = (mins: number) => {
+    switch (mins) {
+      case 15:
+        return '15 Minutes';
+      case 30:
+        return '30 Minutes (Recommended)';
+      case 45:
+        return '45 Minutes';
+      case 60:
+        return '1 Hour';
+      default:
+        return `${mins} Minutes`;
+    }
+  };
 
   // Business Profile Form
   const [bizName, setBizName] = useState(business.businessName);
@@ -301,10 +321,10 @@ export default function SettingsScreen() {
   const handleExportBorrowersCsv = async () => {
     try {
       const uri = await exportBorrowersCsv(customers || []);
-      await shareFile(uri, 'Borrowers List CSV', 'text/csv');
-      showSuccess('Borrowers roster CSV downloaded');
+      await shareFile(uri, 'Customers List CSV', 'text/csv');
+      showSuccess('Customers roster CSV downloaded');
     } catch {
-      showError('Failed to export borrowers CSV');
+      showError('Failed to export customers CSV');
     }
   };
 
@@ -491,20 +511,26 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="Fingerprint / Face Unlock"
+            title={biometricTypeLabel || 'Fingerprint / Face Unlock'}
             subtitle={
               isBiometricAvailable
-                ? `Quick unlock with ${Platform.OS === 'ios' ? 'FaceID / TouchID' : 'Fingerprint'}`
-                : 'Fingerprint hardware not enrolled or available'
+                ? `Quick unlock with ${biometricTypeLabel || 'biometrics'}`
+                : 'Biometric hardware not enrolled or available'
             }
-            iconName="finger-print-outline"
+            iconName={
+              biometricIconName === 'scan-outline'
+                ? 'scan-outline'
+                : biometricIconName === 'eye-outline'
+                ? 'eye-outline'
+                : 'finger-print-outline'
+            }
             rightNode={
               <Toggle
                 value={isBiometricEnabled && isBiometricAvailable}
                 disabled={!isBiometricAvailable}
                 onValueChange={(val) => {
                   setBiometricEnabled(val);
-                  showSuccess(val ? 'Biometric unlock enabled' : 'Biometric unlock disabled');
+                  showSuccess(val ? `${biometricTypeLabel || 'Biometric unlock'} enabled` : `${biometricTypeLabel || 'Biometric unlock'} disabled`);
                 }}
               />
             }
@@ -524,6 +550,14 @@ export default function SettingsScreen() {
             iconName="key-outline"
             showChevron
             onPress={() => setPasswordModalVisible(true)}
+          />
+
+          <ListRow
+            title="Session Inactivity Timeout"
+            subtitle={`Auto-freeze after ${formatTimeoutMinutes(sessionTimeoutMinutes)} in background`}
+            iconName="timer-outline"
+            showChevron
+            onPress={() => setSessionTimeoutModalVisible(true)}
           />
         </Card>
       </View>
@@ -557,9 +591,9 @@ export default function SettingsScreen() {
           />
 
           <ListRow
-            title="App Setup"
-            subtitle="Change company name, app colors & permissions"
-            iconName="sparkles-outline"
+            title="Organization Setup"
+            subtitle="Company branding, mandatory 4-digit PIN lock & themes"
+            iconName="business-outline"
             iconColor={colors.primaryDark}
             iconBgColor={colors.primarySoft}
             showChevron
@@ -830,7 +864,7 @@ export default function SettingsScreen() {
                 </View>
                 <Text style={[styles.pinHeroTitle, { color: colors.ink }]}>Set 4-Digit Passcode</Text>
                 <Text style={[styles.pinHeroSubtitle, { color: colors.textSecondary }]}>
-                  Use this passcode for rapid device lock and borrower record security.
+                  Use this passcode for rapid device lock and customer record security.
                 </Text>
               </View>
 
@@ -927,6 +961,88 @@ export default function SettingsScreen() {
                 variant="primary"
                 fullWidth
               />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL 5: SESSION TIMEOUT PREFERENCE */}
+      <Modal
+        visible={sessionTimeoutModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => safelyCloseModal(setSessionTimeoutModalVisible)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.ink }]}>Session Timeout</Text>
+              <TouchableOpacity onPress={() => safelyCloseModal(setSessionTimeoutModalVisible)}>
+                <Ionicons name="close" size={24} color={colors.ink} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalScroll}>
+              <View style={styles.pinModalHero}>
+                <View style={[styles.pinIconCircle, { backgroundColor: colors.primarySoft }]}>
+                  <Ionicons name="timer-outline" size={26} color={colors.primaryDark} />
+                </View>
+                <Text style={[styles.pinHeroTitle, { color: colors.ink }]}>Background Session Inactivity</Text>
+                <Text style={[styles.pinHeroSubtitle, { color: colors.textSecondary }]}>
+                  Keep your active session alive when switching apps or putting mobile into sleep mode. When timeout expires, your active screen freezes in place safely for quick unlock.
+                </Text>
+              </View>
+
+              {[
+                { value: 15, label: '15 Minutes', hint: 'Quick auto-freeze for higher security' },
+                { value: 30, label: '30 Minutes (Recommended)', hint: 'Balanced privacy and uninterrupted workflow' },
+                { value: 45, label: '45 Minutes', hint: 'Extended workflow window for active days' },
+                { value: 60, label: '1 Hour', hint: 'Maximum uninterrupted session duration' },
+              ].map((opt) => {
+                const isSelected = sessionTimeoutMinutes === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      await setSessionTimeoutMinutes(opt.value);
+                      safelyCloseModal(setSessionTimeoutModalVisible);
+                      showSuccess(`Session timeout set to ${opt.label}`);
+                    }}
+                    style={[
+                      styles.timeoutOptionCard,
+                      {
+                        backgroundColor: isSelected ? colors.primarySoft : colors.surface,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.timeoutOptionLeft}>
+                      <Ionicons
+                        name={isSelected ? 'radio-button-on' : 'radio-button-off'}
+                        size={22}
+                        color={isSelected ? colors.primaryDark : colors.textSecondary}
+                      />
+                      <View style={{ marginLeft: 12, flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.timeoutOptionTitle,
+                            {
+                              color: isSelected ? colors.primaryDark : colors.ink,
+                              fontWeight: isSelected ? '700' : '600',
+                            },
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                        <Text style={[styles.timeoutOptionHint, { color: colors.textSecondary }]}>
+                          {opt.hint}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         </View>
@@ -1203,5 +1319,30 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontHeadline,
     fontSize: 12,
     letterSpacing: 0.8,
+  },
+  timeoutOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    marginBottom: 10,
+  },
+  timeoutOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  timeoutOptionTitle: {
+    fontFamily: typography.fontHeadline,
+    fontSize: 15,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  timeoutOptionHint: {
+    ...typography.caption,
+    fontFamily: typography.fontBody,
+    fontSize: 12,
   },
 });

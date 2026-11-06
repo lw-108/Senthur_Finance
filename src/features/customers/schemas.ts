@@ -11,7 +11,7 @@ const aadhaarRegex = /^\d{12}$/;
 
 export const idProofSchema = z.object({
   id: z.string(),
-  type: z.enum(['Aadhaar', 'PAN', 'Voter', 'DrivingLicense', 'Passport', 'Other']),
+  type: z.enum(['Aadhaar', 'PAN', 'Voter', 'DrivingLicense', 'Passport', 'RationCard', 'Other']),
   number: z.string().min(1, 'ID number is required'),
   frontUrl: z.string().optional(),
   backUrl: z.string().optional(),

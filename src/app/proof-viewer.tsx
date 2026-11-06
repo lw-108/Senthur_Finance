@@ -6,6 +6,7 @@ import { Screen, PillButton, useToast } from '@/components/ui';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
+import { isPdfDocument, openOrShareDocument } from '@/features/customers/components/KYCDocumentPicker';
 
 export default function ProofViewerScreen() {
   const router = useRouter();
@@ -15,6 +16,15 @@ export default function ProofViewerScreen() {
   const bName = (business.businessName || 'FINANCE LEDGER').toUpperCase();
 
   const docTitle = params.title || 'Proof Document';
+  const isPdf = isPdfDocument(params.url);
+
+  const handleShare = async () => {
+    if (params.url) {
+      await openOrShareDocument(params.url, docTitle);
+    } else {
+      showSuccess('No document file attached');
+    }
+  };
 
   return (
     <Screen style={styles.screen}>
@@ -26,9 +36,11 @@ export default function ProofViewerScreen() {
         >
           <Ionicons name="close" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>{docTitle}</Text>
+        <Text style={styles.title} numberOfLines={1}>
+          {docTitle}
+        </Text>
         <TouchableOpacity
-          onPress={() => showSuccess('Document ready for sharing')}
+          onPress={handleShare}
           style={styles.shareBtn}
           accessibilityLabel="Share"
         >
@@ -38,11 +50,25 @@ export default function ProofViewerScreen() {
 
       <View style={styles.imageContainer}>
         {params.url ? (
-          <Image
-            source={{ uri: params.url }}
-            style={styles.documentImage}
-            resizeMode="contain"
-          />
+          isPdf ? (
+            <View style={styles.pdfContainer}>
+              <View style={styles.pdfIconWrap}>
+                <Ionicons name="document-text" size={64} color="#EF4444" />
+              </View>
+              <Text style={styles.pdfTitle}>{docTitle}</Text>
+              <Text style={styles.pdfSubtitle}>PDF ID Proof Document</Text>
+              <TouchableOpacity style={styles.openPdfBtn} onPress={handleShare}>
+                <Ionicons name="open-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.openPdfBtnText}>Open / View PDF</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Image
+              source={{ uri: params.url }}
+              style={styles.documentImage}
+              resizeMode="contain"
+            />
+          )
         ) : (
           <View style={styles.placeholderDoc}>
             <Ionicons name="document-text" size={72} color={colors.primary} />
@@ -56,8 +82,8 @@ export default function ProofViewerScreen() {
 
       <View style={styles.footer}>
         <PillButton
-          title="Share Document"
-          onPress={() => showSuccess('Shared via system sheet')}
+          title={isPdf ? 'Open / Share PDF Document' : 'Share Image Document'}
+          onPress={handleShare}
           variant="secondary"
           iconName="share-social-outline"
           fullWidth
@@ -84,6 +110,9 @@ const styles = StyleSheet.create({
     ...typography.subheading,
     fontFamily: typography.fontHeadline,
     color: '#FFFFFF',
+    flex: 1,
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
   shareBtn: {
     padding: 8,
@@ -99,34 +128,71 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 16,
   },
+  pdfContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    gap: 12,
+  },
+  pdfIconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pdfTitle: {
+    fontFamily: typography.fontHeadline,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  pdfSubtitle: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
+  openPdfBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  openPdfBtnText: {
+    fontFamily: typography.fontHeadline,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
   placeholderDoc: {
-    width: '100%',
-    aspectRatio: 3 / 4,
-    backgroundColor: colors.darkCard,
-    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#1E1E2E',
+    borderRadius: 16,
+    width: '90%',
+    aspectRatio: 3 / 4,
   },
   docTitle: {
+    ...typography.titleLarge,
     fontFamily: typography.fontHeadline,
     color: '#FFFFFF',
-    fontSize: 16,
     marginTop: 16,
     textAlign: 'center',
-    letterSpacing: 1.0,
   },
   watermark: {
-    fontFamily: typography.fontBody,
-    color: 'rgba(255, 255, 255, 0.4)',
-    fontSize: 10,
-    marginTop: 20,
+    ...typography.caption,
+    fontFamily: typography.fontPolymathThin,
+    color: '#A6ACCD',
+    marginTop: 8,
     textAlign: 'center',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
   },
   footer: {
-    paddingBottom: 20,
+    padding: 16,
   },
 });

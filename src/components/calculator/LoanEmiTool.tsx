@@ -70,26 +70,21 @@ export function LoanEmiTool({
         ]}
       />
 
-      <View style={styles.inputRow}>
-        <View style={styles.halfCol}>
-          <Input
-            label="Annual Rate (% p.a.)"
-            keyboardType="numeric"
-            value={rate}
-            onChangeText={setRate}
-            placeholder="24"
-          />
-        </View>
-        <View style={styles.halfCol}>
-          <Input
-            label="Tenure (Months)"
-            keyboardType="numeric"
-            value={tenureMonths}
-            onChangeText={setTenureMonths}
-            placeholder="12"
-          />
-        </View>
-      </View>
+      <Input
+        label="Annual Rate (% p.a.)"
+        keyboardType="numeric"
+        value={rate}
+        onChangeText={setRate}
+        placeholder="e.g. 24"
+      />
+
+      <Input
+        label="Tenure (Months)"
+        keyboardType="numeric"
+        value={tenureMonths}
+        onChangeText={setTenureMonths}
+        placeholder="e.g. 12"
+      />
 
       {/* Hero Result Card */}
       <Card variant="dark" style={styles.resultCard}>

@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { secureStorage } from '@/lib/storage/secureStorage';
 import {
   InterestType,
   RatePeriod,
@@ -16,6 +18,13 @@ interface LoanWizardState {
   // Step 1: Customer
   customerId: string;
   customerName: string;
+  customerMode: 'existing' | 'new';
+  newCustomerName: string;
+  newCustomerPhone: string;
+  newCustomerCity: string;
+  newCustomerAddress: string;
+  newGuarantorName: string;
+  newGuarantorPhone: string;
   title: string;
   category: string;
 
@@ -81,6 +90,13 @@ const initialDefault = {
   currentStep: 1,
   customerId: '',
   customerName: '',
+  customerMode: 'existing' as 'existing' | 'new',
+  newCustomerName: '',
+  newCustomerPhone: '',
+  newCustomerCity: '',
+  newCustomerAddress: '',
+  newGuarantorName: '',
+  newGuarantorPhone: '',
   title: '',
   category: 'Personal Loan',
   principalPaise: 0,
@@ -106,30 +122,38 @@ const initialDefault = {
   notes: '',
 };
 
-export const useLoanWizardDraft = create<LoanWizardState>((set, get) => ({
-  ...initialDefault,
-  preview: computePreviewFromState(initialDefault),
-
-  setStep: (step) => set({ currentStep: step }),
-
-  setField: (field, value) => {
-    set({ [field]: value } as any);
-    get().recomputePreview();
-  },
-
-  recomputePreview: () => {
-    const state = get();
-    const preview = computePreviewFromState(state);
-    set({ preview });
-  },
-
-  resetDraft: (customerId = '', customerName = '') => {
-    const updated = {
+export const useLoanWizardDraft = create<LoanWizardState>()(
+  persist(
+    (set, get) => ({
       ...initialDefault,
-      customerId,
-      customerName,
-      disbursedOn: new Date().toISOString().split('T')[0],
-    };
-    set({ ...updated, preview: computePreviewFromState(updated) });
-  },
-}));
+      preview: computePreviewFromState(initialDefault),
+
+      setStep: (step) => set({ currentStep: step }),
+
+      setField: (field, value) => {
+        set({ [field]: value } as any);
+        get().recomputePreview();
+      },
+
+      recomputePreview: () => {
+        const state = get();
+        const preview = computePreviewFromState(state);
+        set({ preview });
+      },
+
+      resetDraft: (customerId = '', customerName = '') => {
+        const updated = {
+          ...initialDefault,
+          customerId,
+          customerName,
+          disbursedOn: new Date().toISOString().split('T')[0],
+        };
+        set({ ...updated, preview: computePreviewFromState(updated) });
+      },
+    }),
+    {
+      name: 'loanledger_loan_draft',
+      storage: createJSONStorage(() => secureStorage),
+    }
+  )
+);

@@ -30,4 +30,5 @@ export * from './AuditLogsViewer';
 export * from './GoogleIcon';
 export * from './SplashScreenView';
 export * from './LockMorphToast';
+export * from './HomeFinancialBento';
 

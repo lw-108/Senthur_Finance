@@ -13,7 +13,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { radii } from '@/theme/spacing';
 import { shadows } from '@/theme/shadows';
@@ -46,40 +45,14 @@ export function StackedLoanCards({
   onCalculatePress,
   onLoanPress,
 }: StackedLoanCardsProps) {
-  const { colors: dynamicColors } = useTheme();
+  const { colors: dynamicColors, isDark } = useTheme();
   const [activeIndex, setActiveIndex] = useState(0);
 
   if (!loans || loans.length === 0) {
     return null;
   }
 
-  // Visual card configurations: 0 = Dark hero, 1 = Dynamic Accent, 2 = White / Surface
-  const cardThemes = [
-    {
-      bg: dynamicColors.darkCard,
-      text: dynamicColors.onDark,
-      subtext: dynamicColors.onDarkSecondary,
-      iconBg: 'rgba(255, 255, 255, 0.12)',
-      iconColor: dynamicColors.primary,
-      accent: dynamicColors.primary,
-    },
-    {
-      bg: dynamicColors.primary,
-      text: '#FFFFFF',
-      subtext: 'rgba(255, 255, 255, 0.85)',
-      iconBg: 'rgba(255, 255, 255, 0.25)',
-      iconColor: '#FFFFFF',
-      accent: '#FFFFFF',
-    },
-    {
-      bg: dynamicColors.surface,
-      text: dynamicColors.ink,
-      subtext: dynamicColors.textSecondary,
-      iconBg: dynamicColors.primarySoft,
-      iconColor: dynamicColors.primaryDark,
-      accent: dynamicColors.primaryDark,
-    },
-  ];
+  const activeLoan = loans[activeIndex] || loans[0];
 
   return (
     <View style={styles.container}>
@@ -94,7 +67,11 @@ export function StackedLoanCards({
               activeOpacity={0.8}
               style={[
                 styles.tabItem,
-                isActive && styles.activeTabItem,
+                {
+                  backgroundColor: isActive ? dynamicColors.surface : dynamicColors.surfaceMuted,
+                  borderColor: isActive ? dynamicColors.primary : dynamicColors.border,
+                  borderWidth: 1,
+                },
               ]}
             >
               <View
@@ -106,154 +83,140 @@ export function StackedLoanCards({
               <Text
                 style={[
                   styles.tabText,
-                  isActive && styles.activeTabText,
+                  { color: isActive ? dynamicColors.primary : dynamicColors.textSecondary },
+                  isActive && { fontWeight: '700' },
                 ]}
                 numberOfLines={1}
               >
-                {loan.category}
+                {loan.category} • {loan.customerName.split(' ')[0]}
               </Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* Stacked Cards Area */}
-      <View style={styles.cardsStack}>
-        {loans.map((loan, index) => {
-          const isActive = index === activeIndex;
-          // Calculate relative position from activeIndex
-          const offset = (index - activeIndex + loans.length) % loans.length;
-          const theme = cardThemes[offset % cardThemes.length];
+      {/* Clean Borrower Due Card (Theme Mode Based Surface, Non-Clumsy, Color Themed Texts) */}
+      <TouchableOpacity
+        activeOpacity={0.92}
+        onPress={() => onLoanPress?.(activeLoan)}
+        style={[
+          styles.cardBody,
+          {
+            backgroundColor: dynamicColors.surface,
+            borderColor: dynamicColors.border,
+            borderWidth: 1,
+          },
+          shadows.card,
+        ]}
+      >
+        {/* Card Header: Category & Calculate Link */}
+        <View style={styles.notchHeader}>
+          <View style={styles.categoryPill}>
+            <View style={[styles.iconBox, { backgroundColor: dynamicColors.surfaceMuted }]}>
+              <Ionicons name={activeLoan.iconName} size={18} color={dynamicColors.primary} />
+            </View>
+            <Text style={[styles.categoryTitle, { color: dynamicColors.headingPrimary }]}>
+              {activeLoan.category}
+            </Text>
+          </View>
 
-          // Top front card gets highest zIndex
-          const zIndex = loans.length - offset;
-          const translateY = offset * 14;
-          const scale = 1 - offset * 0.04;
-          const opacity = 1 - offset * 0.15;
+          <TouchableOpacity
+            onPress={() => onCalculatePress?.(activeLoan)}
+            style={styles.calculateLink}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[styles.calculateText, { color: dynamicColors.primary }]}>
+              Calculate →
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-          return (
-            <Animated.View
-              key={loan.id}
+        {/* Main Card Content */}
+        <View style={styles.cardContent}>
+          <View style={styles.detailsLeft}>
+            <Text style={[styles.customerName, { color: dynamicColors.ink }]}>
+              {activeLoan.customerName}
+            </Text>
+            <Text style={[styles.loanSubtitle, { color: dynamicColors.textSecondary }]}>
+              {activeLoan.loanNumber} {activeLoan.location ? `• ${activeLoan.location}` : ''}
+            </Text>
+
+            <View style={styles.amountsRow}>
+              <Text style={[styles.principalText, { color: dynamicColors.headingPrimary }]}>
+                {activeLoan.principalFormatted}
+              </Text>
+              <Text style={[styles.interestRate, { color: dynamicColors.textSecondary }]}>
+                @{activeLoan.interestRateFormatted}
+              </Text>
+            </View>
+          </View>
+
+          {/* Right side: Non-highlighted Loan Duration division with color themed text */}
+          <View style={styles.detailsRight}>
+            {activeLoan.collateralPhotoUrl ? (
+              <View style={[styles.collateralWindow, { borderColor: dynamicColors.border }]}>
+                <Image
+                  source={{ uri: activeLoan.collateralPhotoUrl }}
+                  style={styles.collateralImage}
+                />
+              </View>
+            ) : (
+              <View style={styles.statDivision}>
+                <Text style={[styles.highlightStatNumber, { color: dynamicColors.primary }]}>
+                  {activeLoan.highlightStat}
+                </Text>
+                <Text
+                  style={[styles.highlightStatCaption, { color: dynamicColors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {activeLoan.highlightStatCaption}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Footer info bar */}
+        <View style={[styles.cardFooter, { borderTopColor: dynamicColors.border }]}>
+          <View style={styles.badgeRow}>
+            <View
               style={[
-                styles.cardWrapper,
+                styles.innerBadge,
                 {
-                  zIndex,
-                  transform: [{ translateY }, { scale }],
-                  opacity,
+                  backgroundColor: dynamicColors.surfaceMuted,
+                  borderColor: dynamicColors.border,
+                  borderWidth: 1,
                 },
               ]}
             >
-              <TouchableOpacity
-                activeOpacity={0.95}
-                onPress={() => {
-                  if (isActive) {
-                    onLoanPress?.(loan);
-                  } else {
-                    setActiveIndex(index);
-                  }
-                }}
-                style={[
-                  styles.cardBody,
-                  { backgroundColor: theme.bg },
-                  offset === 0 && shadows.hero,
-                  offset === 2 && shadows.card,
-                ]}
-              >
-                {/* Tab Notch Header with SVG curve */}
-                <View style={styles.notchHeader}>
-                  <View style={styles.categoryPill}>
-                    <View style={[styles.iconBox, { backgroundColor: theme.iconBg }]}>
-                      <Ionicons name={loan.iconName} size={18} color={theme.iconColor} />
-                    </View>
-                    <Text style={[styles.categoryTitle, { color: theme.text }]}>
-                      {loan.category}
-                    </Text>
-                  </View>
+              <Text style={[styles.innerBadgeText, { color: dynamicColors.primary }]}>
+                {activeLoan.statusBadge}
+              </Text>
+            </View>
+            <Text style={[styles.tenureText, { color: dynamicColors.textSecondary }]}>
+              Tenure: {activeLoan.tenureFormatted}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
 
-                  <TouchableOpacity
-                    onPress={() => onCalculatePress?.(loan)}
-                    style={styles.calculateLink}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={[styles.calculateText, { color: theme.accent }]}>
-                      Calculate →
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Main Card Content */}
-                <View style={styles.cardContent}>
-                  <View style={styles.detailsLeft}>
-                    <Text style={[styles.customerName, { color: theme.text }]}>
-                      {loan.customerName}
-                    </Text>
-                    <Text style={[styles.loanSubtitle, { color: theme.subtext }]}>
-                      {loan.loanNumber} {loan.location ? `• ${loan.location}` : ''}
-                    </Text>
-
-                    <View style={styles.amountsRow}>
-                      <Text style={[styles.principalText, { color: theme.text }]}>
-                        {loan.principalFormatted}
-                      </Text>
-                      <Text style={[styles.interestRate, { color: theme.subtext }]}>
-                        @{loan.interestRateFormatted}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Right side: Collateral Window or Big Stat Window */}
-                  <View style={styles.detailsRight}>
-                    {loan.collateralPhotoUrl ? (
-                      <View style={styles.collateralWindow}>
-                        <Image
-                          source={{ uri: loan.collateralPhotoUrl }}
-                          style={styles.collateralImage}
-                        />
-                      </View>
-                    ) : (
-                      <View
-                        style={[
-                          styles.statCircle,
-                          { backgroundColor: theme.iconBg },
-                        ]}
-                      >
-                        <Text style={[styles.highlightStatNumber, { color: theme.text }]}>
-                          {loan.highlightStat}
-                        </Text>
-                        <Text
-                          style={[styles.highlightStatCaption, { color: theme.subtext }]}
-                          numberOfLines={1}
-                        >
-                          {loan.highlightStatCaption}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-                {/* Footer info bar */}
-                <View style={styles.cardFooter}>
-                  <View style={styles.badgeRow}>
-                    <View
-                      style={[
-                        styles.innerBadge,
-                        { backgroundColor: theme.iconBg },
-                      ]}
-                    >
-                      <Text style={[styles.innerBadgeText, { color: theme.text }]}>
-                        {loan.statusBadge}
-                      </Text>
-                    </View>
-                    <Text style={[styles.tenureText, { color: theme.subtext }]}>
-                      Tenure: {loan.tenureFormatted}
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </Animated.View>
-          );
-        })}
-      </View>
+      {/* Pagination dots if multiple loans */}
+      {loans.length > 1 && (
+        <View style={styles.pagerDotsRow}>
+          {loans.map((_, dotIdx) => (
+            <TouchableOpacity
+              key={dotIdx}
+              onPress={() => setActiveIndex(dotIdx)}
+              style={[
+                styles.pagerDot,
+                dotIdx === activeIndex
+                  ? [styles.pagerDotActive, { backgroundColor: dynamicColors.primary }]
+                  : { backgroundColor: dynamicColors.border },
+              ]}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -273,11 +236,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
     gap: 6,
   },
   activeTabItem: {
-    backgroundColor: colors.surface,
     ...shadows.soft,
   },
   tabDot: {
@@ -288,10 +249,8 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 12,
     fontWeight: '500',
-    color: colors.textSecondary,
   },
   activeTabText: {
-    color: colors.ink,
     fontWeight: '700',
   },
   cardsStack: {
@@ -392,13 +351,11 @@ const styles = StyleSheet.create({
     height: '100%',
     resizeMode: 'cover',
   },
-  statCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: 22,
-    alignItems: 'center',
+  statDivision: {
+    alignItems: 'flex-end',
     justifyContent: 'center',
-    padding: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
   },
   highlightStatNumber: {
     fontFamily: typography.fontAmount,
@@ -407,15 +364,14 @@ const styles = StyleSheet.create({
   },
   highlightStatCaption: {
     fontFamily: typography.fontBody,
-    fontSize: 10,
+    fontSize: 11,
     marginTop: 2,
-    textAlign: 'center',
+    textAlign: 'right',
   },
   cardFooter: {
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
   badgeRow: {
     flexDirection: 'row',
@@ -434,5 +390,21 @@ const styles = StyleSheet.create({
   tenureText: {
     fontFamily: typography.fontBody,
     fontSize: 12,
+  },
+  pagerDotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  pagerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  pagerDotActive: {
+    width: 18,
+    borderRadius: 3,
   },
 });

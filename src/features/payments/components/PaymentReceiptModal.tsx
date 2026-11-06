@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { typography } from '@/theme/typography';
 import { useTheme } from '@/store/useThemeStore';
 import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 import { Payment } from '../types';
@@ -191,10 +192,10 @@ export function PaymentReceiptModal({
               </View>
             </View>
 
-            {/* Borrower & Loan Details Box */}
+            {/* Customer & Loan Details Box */}
             <View style={[styles.infoCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
               <View style={styles.infoRow}>
-                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Borrower</Text>
+                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Customer</Text>
                 <Text style={[styles.infoValue, { color: colors.ink }]}>{payment.customerName}</Text>
               </View>
               <View style={styles.infoRow}>
@@ -288,15 +289,26 @@ export function PaymentReceiptModal({
               </TouchableOpacity>
             </View>
 
-            {/* Complete / Done Button */}
+            {/* Complete / Done Button (Adapts to Active Selected Color Theme) */}
             <TouchableOpacity
-              style={[styles.doneBtn, { backgroundColor: colors.ink }]}
+              style={[
+                styles.doneBtn,
+                {
+                  backgroundColor: colors.primary,
+                  shadowColor: colors.primaryDark,
+                  shadowOffset: { width: 0, height: 3 },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 5,
+                  elevation: 4,
+                },
+              ]}
               onPress={() => {
                 onClose();
                 if (onDone) onDone();
               }}
               activeOpacity={0.85}
             >
+              <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
               <Text style={styles.doneBtnText}>Done</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -490,15 +502,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   doneBtn: {
-    paddingVertical: 14,
-    borderRadius: 14,
+    height: 48,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    marginTop: 14,
     marginBottom: 10,
+    width: '100%',
   },
   doneBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
+    fontFamily: typography.fontHeadline,
     fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

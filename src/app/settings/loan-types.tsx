@@ -417,55 +417,45 @@ export default function LoanTypesScreen() {
                 ]}
               />
 
-              <View style={styles.formRow}>
-                <View style={styles.formCol}>
-                  <Input
-                    label="Default Rate (%) *"
-                    placeholder="2.0"
-                    keyboardType="numeric"
-                    value={defaultRate}
-                    onChangeText={setDefaultRate}
-                  />
-                </View>
-                <View style={styles.formCol}>
-                  <SelectModal
-                    label="Rate Period"
-                    selectedValue={ratePeriod}
-                    onSelect={(val) => setRatePeriod(val as any)}
-                    options={[
-                      { label: 'Per Month (p.m.)', value: 'PER_MONTH' },
-                      { label: 'Per Annum / Year (p.a.)', value: 'PER_YEAR' },
-                    ]}
-                  />
-                </View>
-              </View>
+              <Input
+                label="Default Rate (%) *"
+                placeholder="2.0"
+                keyboardType="numeric"
+                value={defaultRate}
+                onChangeText={setDefaultRate}
+              />
+
+              <SelectModal
+                label="Rate Period"
+                selectedValue={ratePeriod}
+                onSelect={(val) => setRatePeriod(val as any)}
+                options={[
+                  { label: 'Per Month (p.m.)', value: 'PER_MONTH' },
+                  { label: 'Per Annum / Year (p.a.)', value: 'PER_YEAR' },
+                ]}
+              />
 
               {/* Repayment & Tenure */}
-              <View style={styles.formRow}>
-                <View style={styles.formCol}>
-                  <SelectModal
-                    label="Repayment Frequency"
-                    selectedValue={repaymentFrequency}
-                    onSelect={(val) => setRepaymentFrequency(val as any)}
-                    options={[
-                      { label: 'Daily', value: 'DAILY' },
-                      { label: 'Weekly', value: 'WEEKLY' },
-                      { label: 'Bi-Weekly', value: 'BIWEEKLY' },
-                      { label: 'Monthly', value: 'MONTHLY' },
-                      { label: 'Bullet at End', value: 'BULLET' },
-                    ]}
-                  />
-                </View>
-                <View style={styles.formCol}>
-                  <Input
-                    label="Default Tenure"
-                    placeholder="12"
-                    keyboardType="numeric"
-                    value={tenureValue}
-                    onChangeText={setTenureValue}
-                  />
-                </View>
-              </View>
+              <SelectModal
+                label="Repayment Frequency"
+                selectedValue={repaymentFrequency}
+                onSelect={(val) => setRepaymentFrequency(val as any)}
+                options={[
+                  { label: 'Daily', value: 'DAILY' },
+                  { label: 'Weekly', value: 'WEEKLY' },
+                  { label: 'Bi-Weekly', value: 'BIWEEKLY' },
+                  { label: 'Monthly', value: 'MONTHLY' },
+                  { label: 'Bullet at End', value: 'BULLET' },
+                ]}
+              />
+
+              <Input
+                label="Default Tenure"
+                placeholder="12"
+                keyboardType="numeric"
+                value={tenureValue}
+                onChangeText={setTenureValue}
+              />
 
               {/* Collateral & Penalties */}
               <SelectModal
@@ -518,26 +508,21 @@ export default function LoanTypesScreen() {
               </View>
 
               {/* Concession & Grace */}
-              <View style={styles.formRow}>
-                <View style={styles.formCol}>
-                  <Input
-                    label="Grace Days"
-                    placeholder="3"
-                    keyboardType="numeric"
-                    value={graceDays}
-                    onChangeText={setGraceDays}
-                  />
-                </View>
-                <View style={styles.formCol}>
-                  <Input
-                    label="Max Concession (%)"
-                    placeholder="10"
-                    keyboardType="numeric"
-                    value={maxConcession}
-                    onChangeText={setMaxConcession}
-                  />
-                </View>
-              </View>
+              <Input
+                label="Grace Days"
+                placeholder="3"
+                keyboardType="numeric"
+                value={graceDays}
+                onChangeText={setGraceDays}
+              />
+
+              <Input
+                label="Max Concession (%)"
+                placeholder="10"
+                keyboardType="numeric"
+                value={maxConcession}
+                onChangeText={setMaxConcession}
+              />
 
               <View style={{ height: 24 }} />
             </ScrollView>

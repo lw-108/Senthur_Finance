@@ -31,7 +31,7 @@ import { formatIndianCurrency } from '@/utils/formatters';
 
 export default function AnalyticsScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, chartShades } = useTheme();
   const [activeTab, setActiveTab] = useState<'day' | 'yield'>('day');
   const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d' | 'fy'>('today');
 
@@ -220,7 +220,7 @@ export default function AnalyticsScreen() {
               <EmptyState
                 iconName="calendar-clear-outline"
                 title={`No Activity on ${dayAnalytics.formattedDate}`}
-                description="Tap the calendar button above to pick a date with borrower collections or disburse new loans."
+                description="Tap the calendar button above to pick a date with customer collections or disburse new loans."
               />
             </Card>
           )}
@@ -255,7 +255,7 @@ export default function AnalyticsScreen() {
                 iconColor={dayAnalytics.netCashflowPaise >= 0 ? colors.success : colors.warning}
               />
               <Tile
-                label="Active Borrowers"
+                label="Active Customers"
                 value={`${dayAnalytics.borrowerCount}`}
                 subtitle="Transacted today"
                 iconName="people-outline"
@@ -264,7 +264,7 @@ export default function AnalyticsScreen() {
             </View>
           </View>
 
-          {/* Day's Borrower Transaction History from DB & Audit Logs */}
+          {/* Day's Customer Transaction History from DB & Audit Logs */}
           <View style={styles.sectionHeader}>
             <View>
               <Text
@@ -273,7 +273,7 @@ export default function AnalyticsScreen() {
                   { color: colors.headingPrimary, fontFamily: typography.fontHeadline, letterSpacing: 0.8 },
                 ]}
               >
-                Borrower Transactions
+                Customer Transactions
               </Text>
               <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
                 {dayAnalytics.formattedDate} • {dayAnalytics.transactions.length} record(s) in DB
@@ -448,7 +448,7 @@ export default function AnalyticsScreen() {
                 <View
                   style={[
                     styles.agingDot,
-                    { backgroundColor: idx === 0 ? colors.warning : colors.danger },
+                    { backgroundColor: chartShades[(idx * 2) % chartShades.length] || colors.primary },
                   ]}
                 />
                 <Text style={[styles.agingLabel, { color: colors.ink }]}>{bucket.range}</Text>
@@ -508,7 +508,7 @@ export default function AnalyticsScreen() {
           <EmptyState
             iconName="checkmark-circle-outline"
             title="Zero Delinquencies"
-            description="All borrower accounts are current and in good standing."
+            description="All customer accounts are current and in good standing."
           />
         )}
       </Card>

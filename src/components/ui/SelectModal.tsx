@@ -512,9 +512,13 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    ...typography.body,
+    fontFamily: typography.fontBody,
     fontSize: 14,
-    paddingVertical: 8,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    paddingHorizontal: 0,
+    margin: 0,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
     backgroundColor: 'transparent',
   },
   emptySearchWrap: {

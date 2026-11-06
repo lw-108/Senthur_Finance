@@ -15,6 +15,7 @@ import { numberToIndianWords } from '@/utils/numberToWords';
 import { useToast } from '@/components/ui/Toast';
 import { copyTextToClipboard } from '@/utils/clipboard';
 import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
+import { secureStorage } from '@/lib/storage/secureStorage';
 
 interface CashCounterViewProps {
   colors: any;
@@ -61,11 +62,29 @@ export function CashCounterView({
     1: 0,
   });
 
+  // Restore cached denomination counts across app switches
+  React.useEffect(() => {
+    secureStorage.getItem('loanledger_cash_counter').then((saved) => {
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') {
+            setCounts((prev) => ({ ...prev, ...parsed }));
+          }
+        } catch {}
+      }
+    }).catch(() => {});
+  }, []);
+
   const updateCount = (denom: number, count: number) => {
-    setCounts((prev) => ({
-      ...prev,
-      [denom]: Math.max(0, count || 0),
-    }));
+    setCounts((prev) => {
+      const updated = {
+        ...prev,
+        [denom]: Math.max(0, count || 0),
+      };
+      secureStorage.setItem('loanledger_cash_counter', JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
   };
 
   const increment = (denom: number) => {
@@ -77,6 +96,7 @@ export function CashCounterView({
   };
 
   const handleReset = () => {
+    secureStorage.deleteItem('loanledger_cash_counter').catch(() => {});
     setCounts({
       500: 0,
       200: 0,

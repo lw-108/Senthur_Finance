@@ -197,10 +197,14 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontFamily: typography.fontAmount,
-    fontSize: 28,
+    fontSize: 24,
     letterSpacing: 0.8,
-    paddingVertical: 8,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+    paddingHorizontal: 0,
+    margin: 0,
     backgroundColor: 'transparent',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
   },
   clearBtn: {

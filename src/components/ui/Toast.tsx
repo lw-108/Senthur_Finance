@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
@@ -21,6 +21,7 @@ interface ToastContextValue {
   showSuccess: (message: string) => void;
   showError: (message: string) => void;
   showLockMorph: (onComplete?: () => void) => void;
+  closeToast: (id: number) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -44,6 +45,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const showSuccess = useCallback((message: string) => showToast(message, 'success'), [showToast]);
   const showError = useCallback((message: string) => showToast(message, 'error'), [showToast]);
+
+  const closeToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const showLockMorph = useCallback((onComplete?: () => void) => {
     setLockMorphCallback(() => (onComplete ? onComplete : null));
@@ -70,7 +75,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ToastContext.Provider value={{ showToast, showSuccess, showError, showLockMorph }}>
+    <ToastContext.Provider value={{ showToast, showSuccess, showError, showLockMorph, closeToast }}>
       {children}
       <View pointerEvents="box-none" style={styles.toastContainer}>
         {toasts.map((toast) => (
@@ -89,6 +94,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           >
             {getIcon(toast.type)}
             <Text style={[styles.toastMessage, { color: dynamicColors.ink }]}>{toast.message}</Text>
+            <TouchableOpacity
+              onPress={() => closeToast(toast.id)}
+              style={styles.closeBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Close notification"
+            >
+              <Ionicons name="close" size={18} color={dynamicColors.textSecondary} />
+            </TouchableOpacity>
           </Animated.View>
         ))}
       </View>
@@ -136,5 +150,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.ink,
+  },
+  closeBtn: {
+    padding: 2,
+    marginLeft: 4,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -14,19 +14,8 @@ interface HomeMiniAnalyticsProps {
   payments: Payment[];
 }
 
-const CATEGORY_COLORS = [
-  '#8B5CF6', // Violet
-  '#3B82F6', // Blue
-  '#10B981', // Emerald
-  '#F59E0B', // Amber
-  '#EC4899', // Pink
-  '#6366F1', // Indigo
-  '#14B8A6', // Teal
-  '#F97316', // Orange
-];
-
 export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
-  const { colors: dynamicColors, isDark } = useTheme();
+  const { colors: dynamicColors, chartShades, isDark } = useTheme();
 
   // 1. Strict mathematical calculations for Collection & Recovery Progress
   const {
@@ -86,7 +75,7 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
         count: info.count,
         totalPaise: info.totalPaise,
         sharePercent: Math.round(sharePercent * 10) / 10,
-        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+        color: chartShades[index % chartShades.length],
         startAngle,
         endAngle: cumulativeAngle,
       };
@@ -114,23 +103,23 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
           <Text style={[styles.cardTitle, { color: dynamicColors.headingPrimary }]}>
             Portfolio Recovery Rate
           </Text>
-          <Text style={[styles.rateBadgeText, { color: dynamicColors.success }]}>
+          <Text style={[styles.rateBadgeText, { color: dynamicColors.primaryDark }]}>
             {recoveryRatePercent}% Received
           </Text>
         </View>
 
-        {/* Dual Progress Bar */}
+        {/* Dual Progress Bar using Theme Monochromatic Shades */}
         <View style={[styles.progressBarContainer, { backgroundColor: isDark ? '#222222' : '#ECECF0' }]}>
           <View
             style={[
               styles.progressFillReceived,
-              { width: `${Math.min(100, Math.max(0, recoveryRatePercent))}%`, backgroundColor: dynamicColors.success },
+              { width: `${Math.min(100, Math.max(0, recoveryRatePercent))}%`, backgroundColor: chartShades[0] || dynamicColors.primary },
             ]}
           />
           <View
             style={[
               styles.progressFillPending,
-              { width: `${Math.min(100, Math.max(0, pendingRatePercent))}%`, backgroundColor: dynamicColors.warning },
+              { width: `${Math.min(100, Math.max(0, pendingRatePercent))}%`, backgroundColor: chartShades[2] || dynamicColors.primaryBorder },
             ]}
           />
         </View>
@@ -139,10 +128,15 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
         <View style={styles.progressStatsRow}>
           <View style={styles.statCol}>
             <View style={styles.statDotRow}>
-              <View style={[styles.statDot, { backgroundColor: dynamicColors.success }]} />
+              <View style={[styles.statDot, { backgroundColor: chartShades[0] || dynamicColors.primary }]} />
               <Text style={[styles.statLabel, { color: dynamicColors.textSecondary }]}>Total Received</Text>
             </View>
-            <Text style={[styles.statAmount, { color: dynamicColors.ink }]}>
+            <Text
+              style={[styles.statAmount, { color: dynamicColors.ink }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit={true}
+              minimumFontScale={0.75}
+            >
               {formatIndianCurrency(totalReceivedPaise, { isMinorUnit: true }).formatted}
             </Text>
             <Text style={[styles.statSub, { color: dynamicColors.textTertiary }]}>
@@ -154,10 +148,15 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
 
           <View style={styles.statCol}>
             <View style={styles.statDotRow}>
-              <View style={[styles.statDot, { backgroundColor: dynamicColors.warning }]} />
+              <View style={[styles.statDot, { backgroundColor: chartShades[2] || dynamicColors.primaryBorder }]} />
               <Text style={[styles.statLabel, { color: dynamicColors.textSecondary }]}>Total Pending</Text>
             </View>
-            <Text style={[styles.statAmount, { color: dynamicColors.ink }]}>
+            <Text
+              style={[styles.statAmount, { color: dynamicColors.ink }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit={true}
+              minimumFontScale={0.75}
+            >
               {formatIndianCurrency(totalPendingPaise, { isMinorUnit: true }).formatted}
             </Text>
             <Text style={[styles.statSub, { color: dynamicColors.textTertiary }]}>
@@ -261,7 +260,12 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
                     <Text style={[styles.legendName, { color: dynamicColors.ink }]} numberOfLines={1}>
                       {slice.category}
                     </Text>
-                    <Text style={[styles.legendAmounts, { color: dynamicColors.textSecondary }]}>
+                    <Text
+                      style={[styles.legendAmounts, { color: dynamicColors.textSecondary }]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit={true}
+                      minimumFontScale={0.75}
+                    >
                       {slice.count} loans • {formatIndianCurrency(slice.totalPaise, { isMinorUnit: true }).formatted}
                     </Text>
                   </View>

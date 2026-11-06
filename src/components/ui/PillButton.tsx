@@ -102,21 +102,21 @@ export function PillButton({
     switch (size) {
       case 'sm':
         return {
-          container: { paddingVertical: 8, paddingHorizontal: 16, minHeight: 36 },
+          container: { paddingVertical: 0, paddingHorizontal: 14, height: 40, minHeight: 40, maxHeight: 40 },
           text: { fontSize: 13, fontWeight: '600' },
           iconSize: 15,
         };
       case 'lg':
         return {
-          container: { paddingVertical: 16, paddingHorizontal: 28, minHeight: 54 },
+          container: { paddingVertical: 0, paddingHorizontal: 26, height: 52, minHeight: 52, maxHeight: 52 },
           text: { fontSize: 16, fontWeight: '600' },
           iconSize: 20,
         };
       case 'md':
       default:
         return {
-          container: { paddingVertical: 12, paddingHorizontal: 22, minHeight: 46 },
-          text: { fontSize: 15, fontWeight: '600' },
+          container: { paddingVertical: 0, paddingHorizontal: 20, height: 48, minHeight: 48, maxHeight: 48 },
+          text: { fontSize: 14, fontWeight: '600' },
           iconSize: 18,
         };
     }
@@ -151,7 +151,11 @@ export function PillButton({
               style={styles.leftIcon}
             />
           )}
-          <Text style={[styles.baseText, vStyles.text, sStyles.text, textStyle]}>
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={[styles.baseText, vStyles.text, sStyles.text, textStyle]}
+          >
             {title}
           </Text>
           {iconName && iconPosition === 'right' && (
@@ -185,10 +189,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 1,
   },
   baseText: {
     fontFamily: typography.fontHeadline,
-    letterSpacing: 1.2,
+    letterSpacing: 0.6,
   },
   leftIcon: {
     marginRight: 8,

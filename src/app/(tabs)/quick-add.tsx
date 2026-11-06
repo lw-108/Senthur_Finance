@@ -15,7 +15,7 @@ export default function QuickAddScreen() {
     <Screen scrollable>
       <DisplayTitle
         title="Quick Actions"
-        subtitle="Disburse loan, collect repayment or add borrower"
+        subtitle="Disburse loan, collect repayment or add customer"
       />
 
       <View style={[styles.actionsList, isTablet && styles.containerTablet]}>
@@ -126,12 +126,16 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   backBtn: {
-    flex: 0.38,
-    minHeight: 46,
+    flex: 1,
+    height: 48,
+    minHeight: 48,
+    maxHeight: 48,
   },
   continueBtn: {
-    flex: 0.62,
-    minHeight: 46,
+    flex: 1.6,
+    height: 48,
+    minHeight: 48,
+    maxHeight: 48,
   },
   btnTextSmall: {
     fontSize: 13,

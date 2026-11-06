@@ -65,6 +65,8 @@ export function SegmentedControl<T = string>({
                 isSelected && [styles.selectedSegmentText, { color: dynamicColors.ink }],
               ]}
               numberOfLines={1}
+              adjustsFontSizeToFit={true}
+              minimumFontScale={0.8}
             >
               {item.label}
             </Text>

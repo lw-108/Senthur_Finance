@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { secureStorage } from '@/lib/storage/secureStorage';
 import { CustomerAddress, CustomerReference, Guarantor, IdProof } from './types';
 
 interface CustomerWizardState {
@@ -71,20 +73,28 @@ const initialDraft = {
   currentStep: 1,
 };
 
-export const useCustomerWizardDraft = create<CustomerWizardState>((set) => ({
-  ...initialDraft,
+export const useCustomerWizardDraft = create<CustomerWizardState>()(
+  persist(
+    (set) => ({
+      ...initialDraft,
 
-  setField: (field, value) => set({ [field]: value } as any),
+      setField: (field, value) => set({ [field]: value } as any),
 
-  addIdProof: (proof) =>
-    set((state) => ({ idProofs: [...state.idProofs, proof] })),
+      addIdProof: (proof) =>
+        set((state) => ({ idProofs: [...state.idProofs, proof] })),
 
-  removeIdProof: (id) =>
-    set((state) => ({
-      idProofs: state.idProofs.filter((p) => p.id !== id),
-    })),
+      removeIdProof: (id) =>
+        set((state) => ({
+          idProofs: state.idProofs.filter((p) => p.id !== id),
+        })),
 
-  setStep: (step) => set({ currentStep: step }),
+      setStep: (step) => set({ currentStep: step }),
 
-  resetDraft: () => set({ ...initialDraft }),
-}));
+      resetDraft: () => set({ ...initialDraft }),
+    }),
+    {
+      name: 'loanledger_customer_draft',
+      storage: createJSONStorage(() => secureStorage),
+    }
+  )
+);

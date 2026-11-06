@@ -209,11 +209,11 @@ export default function CustomersScreen() {
     setDeleteConfirmVisible(false);
     try {
       await bulkDeleteMutation.mutateAsync(idsToDelete);
-      showSuccess(`Deleted ${idsToDelete.length} borrower${idsToDelete.length !== 1 ? 's' : ''}`);
+      showSuccess(`Deleted ${idsToDelete.length} customer${idsToDelete.length !== 1 ? 's' : ''}`);
       setSelectedIds(new Set());
       refetch();
     } catch {
-      showError('Failed to delete selected borrowers');
+      showError('Failed to delete selected customers');
     }
   };
 
@@ -235,7 +235,7 @@ export default function CustomersScreen() {
           ]}
         >
           <View style={styles.kpiMetric}>
-            <Text style={[styles.kpiLabel, { color: dynamicColors.textSecondary }]}>Borrowers</Text>
+            <Text style={[styles.kpiLabel, { color: dynamicColors.textSecondary }]}>Customers</Text>
             <Text style={[styles.kpiValue, { color: dynamicColors.headingPrimary }]}>
               {aggregates.totalCount}
             </Text>
@@ -275,7 +275,7 @@ export default function CustomersScreen() {
         {/* Results count & current sort indicator */}
         <View style={styles.resultsInfoRow}>
           <Text style={[styles.resultsCountText, { color: dynamicColors.textSecondary }]}>
-            Showing <Text style={{ color: dynamicColors.ink, fontWeight: '700' }}>{filteredCustomers.length}</Text> of {rawCustomers.length} borrowers
+            Showing <Text style={{ color: dynamicColors.ink, fontWeight: '700' }}>{filteredCustomers.length}</Text> of {rawCustomers.length} customers
           </Text>
 
           {/* Sort selector pill */}
@@ -443,8 +443,8 @@ export default function CustomersScreen() {
         <View style={styles.emptyContainer}>
           <EmptyState
             iconName="search-outline"
-            title="No Matching Borrowers"
-            description={`No borrowers match "${search}". Try searching by phone number, city, or name.`}
+            title="No Matching Customers"
+            description={`No customers match "${search}". Try searching by phone number, city, or name.`}
             actionTitle="Clear Search"
             onAction={() => setSearch('')}
           />
@@ -456,8 +456,8 @@ export default function CustomersScreen() {
       <View style={styles.emptyContainer}>
         <EmptyState
           iconName="people-outline"
-          title="No Borrowers Found"
-          description="Add your first borrower or merge from phone contacts to get started."
+          title="No Customers Found"
+          description="Add your first customer or merge from phone contacts to get started."
           actionTitle="Add New Customer"
           onAction={() => {
             resetDraft();
@@ -537,7 +537,7 @@ export default function CustomersScreen() {
               ]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
-              accessibilityLabel="Refresh borrowers"
+              accessibilityLabel="Refresh customers"
             >
               <Ionicons name="refresh-outline" size={18} color={dynamicColors.ink} />
             </TouchableOpacity>
@@ -597,7 +597,7 @@ export default function CustomersScreen() {
         </View>
       ) : (
         <DisplayTitle
-          title="Borrowers"
+          title="Customers"
           subtitle="Manage customer KYC, loans & guarantees"
         />
       )}
@@ -703,8 +703,8 @@ export default function CustomersScreen() {
       {/* Group Delete Confirmation Dialog */}
       <ConfirmDialog
         visible={deleteConfirmVisible}
-        title={`Delete ${selectedIds.size} Borrower${selectedIds.size !== 1 ? 's' : ''}`}
-        message={`Are you sure you want to delete ${selectedIds.size} selected borrower${selectedIds.size !== 1 ? 's' : ''}? This will remove them from your active records.`}
+        title={`Delete ${selectedIds.size} Customer${selectedIds.size !== 1 ? 's' : ''}`}
+        message={`Are you sure you want to delete ${selectedIds.size} selected customer${selectedIds.size !== 1 ? 's' : ''}? This will remove them from your active records.`}
         confirmLabel={`Delete (${selectedIds.size})`}
         cancelLabel="Cancel"
         isDestructive

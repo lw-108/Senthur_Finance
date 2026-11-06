@@ -17,6 +17,7 @@ import { NumberToWordsView } from '@/components/calculator/NumberToWordsView';
 import { TextToNumberView } from '@/components/calculator/TextToNumberView';
 import { CashCounterView } from '@/components/calculator/CashCounterView';
 import { LoanEmiTool } from '@/components/calculator/LoanEmiTool';
+import { secureStorage } from '@/lib/storage/secureStorage';
 
 type TabType = 'calc' | 'words' | 'text' | 'cash' | 'emi';
 
@@ -28,6 +29,28 @@ export default function CalculatorScreen() {
   const [sharedAmount, setSharedAmount] = useState<number>(100000);
   const [showThemePicker, setShowThemePicker] = useState<boolean>(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+
+  // Restore cached calculator tool and amount across app switches
+  React.useEffect(() => {
+    secureStorage.getItem('loanledger_calculator_tab').then((tab) => {
+      if (tab && ['calc', 'words', 'text', 'cash', 'emi'].includes(tab)) {
+        setActiveTab(tab as TabType);
+      }
+    }).catch(() => {});
+    secureStorage.getItem('loanledger_calculator_amount').then((amt) => {
+      if (amt && !isNaN(Number(amt)) && Number(amt) > 0) {
+        setSharedAmount(Number(amt));
+      }
+    }).catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    secureStorage.setItem('loanledger_calculator_tab', activeTab).catch(() => {});
+  }, [activeTab]);
+
+  React.useEffect(() => {
+    secureStorage.setItem('loanledger_calculator_amount', String(sharedAmount)).catch(() => {});
+  }, [sharedAmount]);
 
   // Cross-tool data transfer handlers
   const handleSendToWords = (amount: number) => {

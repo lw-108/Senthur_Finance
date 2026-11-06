@@ -117,7 +117,7 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Center + Quick Add FAB Button */}
+      {/* Center + Quick Add FAB Button: All-in-One Customer & Loan Disburse */}
       <Tabs.Screen
         name="quick-add"
         options={{
@@ -128,7 +128,7 @@ export default function TabsLayout() {
                 onPress={() => router.push('/loans/new' as any)}
                 activeOpacity={0.85}
                 accessibilityRole="button"
-                accessibilityLabel="Create New Loan"
+                accessibilityLabel="Create New Customer & Loan"
                 style={[
                   styles.centerFab,
                   {
@@ -137,10 +137,17 @@ export default function TabsLayout() {
                     borderRadius: fabSize / 2,
                     backgroundColor: colors.primary,
                     transform: [{ translateY: fabTop }],
+                    shadowColor: colors.primaryDark,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.35,
+                    shadowRadius: 6,
+                    elevation: 8,
+                    borderWidth: 2,
+                    borderColor: colors.surface,
                   },
                 ]}
               >
-                <Ionicons name="add" size={fabIconSize} color="#FFFFFF" />
+                <Ionicons name="add" size={fabIconSize + 2} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           ),

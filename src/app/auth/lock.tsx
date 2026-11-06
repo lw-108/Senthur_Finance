@@ -27,8 +27,14 @@ import { useTheme } from '@/store/useThemeStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useBusinessSettingsStore } from '@/store/useBusinessSettingsStore';
 import { usePermanentAvatar, DEFAULT_AVATAR_URL } from '@/lib/storage/profileStorage';
+import { secureStorage } from '@/lib/storage/secureStorage';
 
-export default function LockScreen() {
+export interface LockScreenProps {
+  onUnlockSuccess?: () => void;
+  isOverlay?: boolean;
+}
+
+export default function LockScreen({ onUnlockSuccess, isOverlay }: LockScreenProps = {}) {
   const router = useRouter();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { colors: dynamicColors, isDark } = useTheme();
@@ -41,8 +47,14 @@ export default function LockScreen() {
     unlockWithBiometrics,
     hasPinSet,
     isBiometricAvailable,
+    isBiometricEnabled,
+    biometricTypeLabel,
+    biometricIconName,
     signOut,
   } = useAuthStore();
+
+  const canUseBiometrics = isBiometricAvailable && isBiometricEnabled;
+  const hasAttemptedAutoBiometric = React.useRef(false);
 
   const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
@@ -51,6 +63,24 @@ export default function LockScreen() {
   const [error, setError] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [measuredCardHeight, setMeasuredCardHeight] = useState<number>(0);
+
+  // Default to PIN mode if PIN is configured
+  useEffect(() => {
+    if (hasPinSet) {
+      setUsePinMode(true);
+    }
+  }, [hasPinSet]);
+
+  // Auto-prompt fingerprint biometric authentication when enabled on device
+  useEffect(() => {
+    if (canUseBiometrics && !hasAttemptedAutoBiometric.current) {
+      hasAttemptedAutoBiometric.current = true;
+      const timer = setTimeout(() => {
+        handleBiometric();
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [canUseBiometrics]);
 
   // Monitor keyboard visibility so screen stays locked with zero scroll when closed
   useEffect(() => {
@@ -66,6 +96,25 @@ export default function LockScreen() {
     };
   }, []);
 
+  const handleUnlockComplete = () => {
+    if (onUnlockSuccess) {
+      onUnlockSuccess();
+    } else {
+      secureStorage
+        .getItem('loanledger_last_active_route')
+        .then((lastRoute) => {
+          if (lastRoute && !lastRoute.startsWith('/auth') && lastRoute !== '/') {
+            router.replace(lastRoute as any);
+          } else {
+            router.replace('/' as any);
+          }
+        })
+        .catch(() => {
+          router.replace('/' as any);
+        });
+    }
+  };
+
   // Password Unlock Handler
   const handlePasswordUnlock = async () => {
     if (!password) {
@@ -78,7 +127,7 @@ export default function LockScreen() {
     try {
       const success = await unlockWithPassword(password);
       if (success) {
-        showLockMorph(() => router.replace('/' as any));
+        showLockMorph(() => handleUnlockComplete());
       } else {
         setError('Incorrect password. Please verify and try again.');
         showError('Incorrect password');
@@ -101,7 +150,7 @@ export default function LockScreen() {
         try {
           const success = await unlockWithPin(nextPin);
           if (success) {
-            showLockMorph(() => router.replace('/' as any));
+            showLockMorph(() => handleUnlockComplete());
           } else {
             showError('Incorrect PIN');
             setPin('');
@@ -122,7 +171,7 @@ export default function LockScreen() {
     try {
       const success = await unlockWithBiometrics();
       if (success) {
-        showLockMorph(() => router.replace('/' as any));
+        showLockMorph(() => handleUnlockComplete());
       } else {
         showError('Biometric verification failed');
       }
@@ -433,7 +482,7 @@ export default function LockScreen() {
                     ]}
                   />
 
-                  {isBiometricAvailable && (
+                  {canUseBiometrics && (
                     <TouchableOpacity
                       style={[
                         styles.biometricBtn,
@@ -449,7 +498,7 @@ export default function LockScreen() {
                       activeOpacity={0.8}
                     >
                       <Ionicons
-                        name="finger-print"
+                        name={biometricIconName || 'finger-print'}
                         size={isExtraSmall ? 18 : isSmall ? 20 : 22}
                         color={dynamicColors.primary}
                       />
@@ -462,7 +511,7 @@ export default function LockScreen() {
                           },
                         ]}
                       >
-                        Unlock with Biometrics
+                        Unlock with {biometricTypeLabel || 'Biometrics'}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -559,7 +608,7 @@ export default function LockScreen() {
                       </TouchableOpacity>
                     ))}
 
-                    {isBiometricAvailable ? (
+                    {canUseBiometrics ? (
                       <TouchableOpacity
                         style={[
                           styles.keyBtn,
@@ -576,7 +625,7 @@ export default function LockScreen() {
                         activeOpacity={0.7}
                       >
                         <Ionicons
-                          name="finger-print"
+                          name={biometricIconName || 'finger-print'}
                           size={isExtraSmall ? 18 : isSmall ? 22 : 26}
                           color={dynamicColors.primary}
                         />

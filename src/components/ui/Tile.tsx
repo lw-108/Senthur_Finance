@@ -120,7 +120,7 @@ export function Tile({
             styles.label,
             { color: variant === 'dark' ? dynamicColors.onDarkSecondary : dynamicColors.textSecondary },
           ]}
-          numberOfLines={1}
+          numberOfLines={2}
         >
           {label}
         </Text>
@@ -132,6 +132,8 @@ export function Tile({
               { color: variant === 'dark' ? dynamicColors.onDark : dynamicColors.ink },
             ]}
             numberOfLines={1}
+            adjustsFontSizeToFit={true}
+            minimumFontScale={0.75}
           >
             {value}
           </Text>
@@ -143,7 +145,7 @@ export function Tile({
               styles.subtitle,
               { color: variant === 'dark' ? dynamicColors.onDarkSecondary : dynamicColors.textMuted },
             ]}
-            numberOfLines={1}
+            numberOfLines={2}
           >
             {subtitle}
           </Text>

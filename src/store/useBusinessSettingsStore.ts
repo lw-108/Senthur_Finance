@@ -24,6 +24,8 @@ export interface BusinessProfile {
   pincode: string;
   licenseNumber: string;
   avatarUrl: string | null;
+  security_pin?: string;
+  has_pin_lock?: boolean;
 }
 
 export interface CurrencySettings {
