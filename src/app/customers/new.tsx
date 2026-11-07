@@ -195,7 +195,11 @@ export default function NewCustomerScreen() {
       draft.setStep(draft.currentStep - 1);
     } else {
       // Preserve temporary filled form data in local cache
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/customers' as any);
+      }
     }
   };
 
@@ -245,7 +249,11 @@ export default function NewCustomerScreen() {
       showSuccess(`${draft.fullName} added successfully!`);
       draft.resetDraft();
       await secureStorage.setItem('loanledger_last_active_route', '/');
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/customers' as any);
+      }
     } catch (e: any) {
       showError(e?.message || 'Failed to save customer');
     }

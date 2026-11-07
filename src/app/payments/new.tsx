@@ -384,14 +384,22 @@ export default function RecordPaymentScreen() {
         visible={receiptModalVisible}
         onClose={() => {
           setReceiptModalVisible(false);
-          router.back();
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/' as any);
+          }
         }}
         payment={recordedPayment}
         loan={activeLoan}
         customerPhone={customer?.phone}
         onDone={() => {
           setReceiptModalVisible(false);
-          router.back();
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/' as any);
+          }
         }}
       />
     </Screen>

@@ -55,6 +55,8 @@ export function Header({
       onBack();
     } else if (router.canGoBack()) {
       router.back();
+    } else {
+      router.replace('/' as any);
     }
   };
 

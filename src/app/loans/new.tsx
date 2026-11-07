@@ -248,7 +248,11 @@ export default function NewLoanScreen() {
       draft.setStep(draft.currentStep - 1);
     } else {
       // Preserve filled form draft when user leaves or switches apps
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/' as any);
+      }
     }
   };
 
@@ -319,7 +323,11 @@ export default function NewLoanScreen() {
       showSuccess(`Loan ${loanNumber} disbursed to ${draft.customerName}!`);
       draft.resetDraft();
       await secureStorage.setItem('loanledger_last_active_route', '/');
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/' as any);
+      }
     } catch (e: any) {
       showError(e?.message || 'Failed to disburse loan');
     }

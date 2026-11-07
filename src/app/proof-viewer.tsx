@@ -30,7 +30,13 @@ export default function ProofViewerScreen() {
     <Screen style={styles.screen}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/' as any);
+            }
+          }}
           style={styles.closeBtn}
           accessibilityLabel="Close"
         >

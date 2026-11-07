@@ -329,7 +329,13 @@ export default function CustomerDetailScreen() {
           title="Customer Not Found"
           description="The requested customer record does not exist or has been removed."
           actionTitle="Back to Customers"
-          onAction={() => router.back()}
+          onAction={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/customers' as any);
+            }
+          }}
         />
       </Screen>
     );
@@ -402,7 +408,11 @@ export default function CustomerDetailScreen() {
     try {
       await deleteMutation.mutateAsync(customer.id);
       showSuccess(`${customer.fullName} archived.`);
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/customers' as any);
+      }
     } catch {
       showError('Failed to archive customer');
     }

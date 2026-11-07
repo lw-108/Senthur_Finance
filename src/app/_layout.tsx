@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Platform, View, StyleSheet, AppState, type AppStateStatus } from 'react-native';
+import { Platform, View, StyleSheet, AppState, BackHandler, type AppStateStatus } from 'react-native';
 import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -119,6 +119,29 @@ export default function RootLayout() {
     initializeTheme();
     initializeBusiness();
   }, [initializeAuth, initializeTheme, initializeBusiness]);
+
+  // Intercept Android hardware back button to prevent unhandled 'GO_BACK' navigator warnings
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const onBackPress = () => {
+      if (router.canGoBack()) {
+        router.back();
+        return true;
+      }
+      // If user is on a nested/detail screen without back history, safely return to home
+      if (pathname && pathname !== '/' && !pathname.endsWith('(tabs)')) {
+        router.replace('/' as any);
+        return true;
+      }
+      return false; // Exit/minimize app on root home tab
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => {
+      subscription.remove();
+    };
+  }, [pathname, router]);
 
   // Monitor AppState to maintain session for configured timeout (e.g. 30 mins) during app switch / phone sleep
   useEffect(() => {
