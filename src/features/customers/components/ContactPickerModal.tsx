@@ -11,7 +11,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-import * as Contacts from 'expo-contacts';
+import * as Contacts from 'expo-contacts/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/store/useThemeStore';
 import { typography } from '@/theme/typography';

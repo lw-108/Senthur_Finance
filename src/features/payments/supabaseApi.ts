@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured, isValidUUID } from '@/lib/supabase/client';
-import { getActiveOrganizationId } from '@/lib/supabase/activeOrg';
+import { getActiveOrganizationId, DEFAULT_ORG_ID, setActiveOrganizationId } from '@/lib/supabase/activeOrg';
 import { Payment, RecordPaymentInput } from './types';
 import { fetchLoanById, updateLoan, fetchLoans } from '@/features/loans/supabaseApi';
 import { updateCustomer } from '@/features/customers/supabaseApi';
@@ -46,9 +46,12 @@ export async function fetchPayments(
       let query = supabase
         .from('payments')
         .select('*')
-        .eq('organization_id', orgId)
         .eq('is_deleted', false)
         .order('paid_at', { ascending: false });
+
+      if (orgId && orgId !== DEFAULT_ORG_ID) {
+        query = query.eq('organization_id', orgId);
+      }
 
       if (loanId) {
         query = query.eq('loan_id', loanId);
@@ -59,6 +62,12 @@ export async function fetchPayments(
 
       const { data, error } = await query;
       if (!error && data) {
+        if (data.length > 0 && (!orgId || orgId === DEFAULT_ORG_ID)) {
+          const detectedOrg = data[0].organization_id;
+          if (detectedOrg && detectedOrg !== DEFAULT_ORG_ID && isValidUUID(detectedOrg)) {
+            setActiveOrganizationId(detectedOrg);
+          }
+        }
         return data.map(paymentRowToDomain);
       }
     } catch (e) {

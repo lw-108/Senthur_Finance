@@ -11,7 +11,8 @@
       "icon": "./assets/images/vel.png",
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Senthur Finance to access your camera to take profile photos and KYC documents.",
-        "NSPhotoLibraryUsageDescription": "Allow Senthur Finance to access your photos to select profile pictures and KYC documents."
+        "NSPhotoLibraryUsageDescription": "Allow Senthur Finance to access your photos to select profile pictures and KYC documents.",
+        "NSContactsUsageDescription": "Allow Senthur Finance to access your contacts to import and merge borrowers."
       }
     },
     "android": {
@@ -23,6 +24,8 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.senthurfinance",
       "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",

@@ -70,17 +70,19 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
       const startAngle = cumulativeAngle;
       cumulativeAngle += angle;
 
+      const sliceColor = chartShades[index % chartShades.length] || dynamicColors.primary;
+
       return {
         category,
         count: info.count,
         totalPaise: info.totalPaise,
         sharePercent: Math.round(sharePercent * 10) / 10,
-        color: chartShades[index % chartShades.length],
+        color: sliceColor,
         startAngle,
         endAngle: cumulativeAngle,
       };
     });
-  }, [loans]);
+  }, [loans, chartShades, dynamicColors.primary]);
 
   // SVG Donut Path helper
   const size = 160;
@@ -113,13 +115,13 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
           <View
             style={[
               styles.progressFillReceived,
-              { width: `${Math.min(100, Math.max(0, recoveryRatePercent))}%`, backgroundColor: chartShades[0] || dynamicColors.primary },
+              { width: `${Math.min(100, Math.max(0, recoveryRatePercent))}%`, backgroundColor: dynamicColors.primary },
             ]}
           />
           <View
             style={[
               styles.progressFillPending,
-              { width: `${Math.min(100, Math.max(0, pendingRatePercent))}%`, backgroundColor: chartShades[2] || dynamicColors.primaryBorder },
+              { width: `${Math.min(100, Math.max(0, pendingRatePercent))}%`, backgroundColor: dynamicColors.primaryBorder },
             ]}
           />
         </View>
@@ -128,7 +130,7 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
         <View style={styles.progressStatsRow}>
           <View style={styles.statCol}>
             <View style={styles.statDotRow}>
-              <View style={[styles.statDot, { backgroundColor: chartShades[0] || dynamicColors.primary }]} />
+              <View style={[styles.statDot, { backgroundColor: dynamicColors.primary }]} />
               <Text style={[styles.statLabel, { color: dynamicColors.textSecondary }]}>Total Received</Text>
             </View>
             <Text
@@ -148,7 +150,7 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
 
           <View style={styles.statCol}>
             <View style={styles.statDotRow}>
-              <View style={[styles.statDot, { backgroundColor: chartShades[2] || dynamicColors.primaryBorder }]} />
+              <View style={[styles.statDot, { backgroundColor: dynamicColors.primaryBorder }]} />
               <Text style={[styles.statLabel, { color: dynamicColors.textSecondary }]}>Total Pending</Text>
             </View>
             <Text
@@ -193,7 +195,7 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
                   cx={center}
                   cy={center}
                   r={radius}
-                  stroke={isDark ? '#333333' : '#F1F1F5'}
+                  stroke={isDark ? `${dynamicColors.primary}22` : `${dynamicColors.primary}12`}
                   strokeWidth={strokeWidth}
                   fill="none"
                 />
@@ -228,7 +230,7 @@ export function HomeMiniAnalytics({ loans, payments }: HomeMiniAnalyticsProps) {
                 fontSize="22"
                 fontFamily="Polymath"
                 letterSpacing="1"
-                fill={dynamicColors.ink}
+                fill={dynamicColors.headingPrimary}
               >
                 {loans.filter((l) => l.status === 'ACTIVE' || l.status === 'OVERDUE').length}
               </SvgText>

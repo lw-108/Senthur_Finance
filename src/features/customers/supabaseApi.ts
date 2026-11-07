@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured, isValidUUID } from '@/lib/supabase/client';
-import { getActiveOrganizationId } from '@/lib/supabase/activeOrg';
+import { getActiveOrganizationId, DEFAULT_ORG_ID, setActiveOrganizationId } from '@/lib/supabase/activeOrg';
 import {
   Customer,
   CustomerFilterParams,
@@ -41,6 +41,11 @@ async function persistLocalCache() {
   } catch {}
 }
 
+export function _resetCustomerCacheForTesting() {
+  localCustomersCache = [];
+  isCacheLoaded = false;
+}
+
 export function seedDemoCustomers(_adminUid: string): Customer[] {
   return localCustomersCache;
 }
@@ -57,9 +62,12 @@ export async function fetchCustomers(
       let query = supabase
         .from('customers')
         .select('*')
-        .eq('organization_id', orgId)
         .eq('is_deleted', false)
         .order('full_name', { ascending: true });
+
+      if (orgId && orgId !== DEFAULT_ORG_ID) {
+        query = query.eq('organization_id', orgId);
+      }
 
       if (params?.search) {
         const s = params.search.trim();
@@ -74,6 +82,12 @@ export async function fetchCustomers(
 
       const { data, error } = await query;
       if (!error && data) {
+        if (data.length > 0 && (!orgId || orgId === DEFAULT_ORG_ID)) {
+          const detectedOrg = data[0].organization_id;
+          if (detectedOrg && detectedOrg !== DEFAULT_ORG_ID && isValidUUID(detectedOrg)) {
+            setActiveOrganizationId(detectedOrg);
+          }
+        }
         let domainList = data.map(customerRowToDomain);
         if (domainList.length > 0) {
           // Merge Supabase records with local cache
@@ -345,6 +359,11 @@ export async function batchMergePhoneContacts(
   strategy: ContactMergeStrategy = 'MERGE_INTO_EXISTING'
 ): Promise<MergeStrategyResult> {
   await ensureLocalCacheLoaded();
+  if (localCustomersCache.length === 0 && isSupabaseConfigured()) {
+    try {
+      await fetchCustomers();
+    } catch {}
+  }
   const orgId = await getActiveOrganizationId();
   const { data: userRes } = await supabase.auth.getUser();
   const userId = userRes?.user?.id || null;

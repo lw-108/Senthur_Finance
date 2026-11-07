@@ -38,7 +38,13 @@ export function applyMergeStrategyToCustomer(
       // Keep existing non-empty fields; union new phone numbers; fill missing contact details
       const altPhonesSet = new Set<string>();
       if (existing.altPhone) {
-        altPhonesSet.add(normalizePhone(existing.altPhone).e164 || existing.altPhone);
+        const parts = existing.altPhone.split(/[,;/]+/).map((s) => s.trim()).filter(Boolean);
+        for (const ep of parts) {
+          const normE164 = normalizePhone(ep).e164 || ep;
+          if (normE164 !== normalizedExistingPhone) {
+            altPhonesSet.add(normE164);
+          }
+        }
       }
       for (const phone of allIncomingPhones) {
         if (phone !== normalizedExistingPhone) {

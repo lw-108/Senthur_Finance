@@ -8,7 +8,11 @@ import {
   findMatchingCustomer,
   mergeExistingCustomers,
 } from '@/features/customers/customerMergeService';
-import { Customer, ContactMergeStrategy } from '@/features/customers/types';
+import {
+  batchMergePhoneContacts,
+  _resetCustomerCacheForTesting,
+} from '@/features/customers/supabaseApi';
+import { Customer, ContactMergeStrategy, BatchMergeContactInput } from '@/features/customers/types';
 import { secureStorage } from '@/lib/storage/secureStorage';
 
 describe('Phone Number Normalization (normalizePhone & arePhonesEqual)', () => {
@@ -292,5 +296,175 @@ describe('Ledger Re-pointing & Financial Invariance during Customer Merge', () =
     await expect(
       mergeExistingCustomers('admin-1', 'cust-target', 'cust-target')
     ).rejects.toThrow('Cannot merge a customer into itself');
+  });
+});
+
+describe('Device Contacts Batch Merge API (batchMergePhoneContacts)', () => {
+  const initialCustomer: Customer = {
+    id: 'cust-existing-1',
+    fullName: 'Anand Kumar',
+    phone: '9840123456',
+    altPhone: '9443112233, 9884001122',
+    email: 'anand@example.com',
+    address: {
+      line1: '10 Bazaar Street',
+      city: 'Coimbatore',
+      state: 'Tamil Nadu',
+      pincode: '641001',
+    },
+    idProofs: [],
+    references: [],
+    tags: ['VIP Borrower'],
+    totals: {
+      activeLoans: 2,
+      totalLent: 10000000,
+      totalOutstanding: 4500000,
+      totalPaid: 5500000,
+      overdueAmount: 0,
+    },
+    status: 'Active',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    createdBy: 'admin-1',
+    isDeleted: false,
+  };
+
+  beforeEach(async () => {
+    _resetCustomerCacheForTesting();
+    await secureStorage.setItem(
+      'sf_local_customers_cache_v2',
+      JSON.stringify([JSON.parse(JSON.stringify(initialCustomer))])
+    );
+  });
+
+  it('matches customer by alternate phone when candidate has that number', async () => {
+    const input: BatchMergeContactInput[] = [
+      {
+        name: 'Anand K (Work)',
+        phone: '+91 94431 12233', // matches the first number in comma-separated altPhone
+        allPhones: ['9443112233', '9777111222'],
+      },
+    ];
+
+    const result = await batchMergePhoneContacts('admin-1', input, 'MERGE_INTO_EXISTING');
+    expect(result.added).toBe(0);
+    expect(result.updated).toBe(1);
+    expect(result.mergedDetails[0].action).toBe('UPDATED');
+    expect(result.mergedDetails[0].customerId).toBe('cust-existing-1');
+
+    const raw = await secureStorage.getItem('sf_local_customers_cache_v2');
+    const customers: Customer[] = JSON.parse(raw!);
+    const updated = customers.find((c) => c.id === 'cust-existing-1');
+    expect(updated).toBeDefined();
+    // New secondary phone should be unioned
+    expect(updated?.altPhone).toContain('+919777111222');
+    // Financial totals must remain untouched
+    expect(updated?.totals.activeLoans).toBe(2);
+    expect(updated?.totals.totalOutstanding).toBe(4500000);
+  });
+
+  it('creates a new customer when candidate phone does not match any existing customer', async () => {
+    const input: BatchMergeContactInput[] = [
+      {
+        name: 'Priya Sundaram',
+        phone: '9894055667',
+        allPhones: ['9894055667'],
+        email: 'priya@example.com',
+      },
+    ];
+
+    const result = await batchMergePhoneContacts('admin-1', input, 'MERGE_INTO_EXISTING');
+    expect(result.added).toBe(1);
+    expect(result.updated).toBe(0);
+    expect(result.mergedDetails[0].action).toBe('CREATED');
+
+    const raw = await secureStorage.getItem('sf_local_customers_cache_v2');
+    const customers: Customer[] = JSON.parse(raw!);
+    expect(customers.length).toBe(2);
+    const newCust = customers.find((c) => c.phone === '9894055667');
+    expect(newCust).toBeDefined();
+    expect(newCust?.fullName).toBe('Priya Sundaram');
+    expect(newCust?.email).toBe('priya@example.com');
+    expect(newCust?.tags).toContain('Phone Contact');
+  });
+
+  it('skips invalid contacts with fewer than 10 digits', async () => {
+    const input: BatchMergeContactInput[] = [
+      {
+        name: 'Helpdesk 100',
+        phone: '100',
+      },
+      {
+        name: 'Short Landline',
+        phone: '0422',
+      },
+      {
+        name: 'Valid Borrower',
+        phone: '+91 97890 12345',
+      },
+    ];
+
+    const result = await batchMergePhoneContacts('admin-1', input, 'MERGE_INTO_EXISTING');
+    expect(result.skipped).toBe(2);
+    expect(result.added).toBe(1);
+  });
+
+  it('CREATE_NEW strategy forces creation of a new customer even if phone matches existing', async () => {
+    const input: BatchMergeContactInput[] = [
+      {
+        name: 'Anand Kumar Secondary Business',
+        phone: '9840123456', // same as existing
+      },
+    ];
+
+    const result = await batchMergePhoneContacts('admin-1', input, 'CREATE_NEW');
+    expect(result.added).toBe(1);
+    expect(result.updated).toBe(0);
+
+    const raw = await secureStorage.getItem('sf_local_customers_cache_v2');
+    const customers: Customer[] = JSON.parse(raw!);
+    expect(customers.length).toBe(2);
+  });
+
+  it('FILL_EMPTY_ONLY strategy fills only missing fields without replacing name or address', async () => {
+    const input: BatchMergeContactInput[] = [
+      {
+        name: 'Different Name From Contact Book',
+        phone: '9840123456',
+        photoUrl: 'https://example.com/contact-photo.jpg',
+      },
+    ];
+
+    const result = await batchMergePhoneContacts('admin-1', input, 'FILL_EMPTY_ONLY');
+    expect(result.updated).toBe(1);
+
+    const raw = await secureStorage.getItem('sf_local_customers_cache_v2');
+    const customers: Customer[] = JSON.parse(raw!);
+    const updated = customers.find((c) => c.id === 'cust-existing-1')!;
+    // Name was preserved
+    expect(updated.fullName).toBe('Anand Kumar');
+    // Photo was filled
+    expect(updated.photoUrl).toBe('https://example.com/contact-photo.jpg');
+  });
+
+  it('OVERWRITE strategy updates existing customer with contact data and preserves old phone in altPhone', async () => {
+    const input: BatchMergeContactInput[] = [
+      {
+        name: 'Anand Kumar (Updated Official)',
+        phone: '9944001122',
+        allPhones: ['9944001122', '9840123456'], // candidate contains the existing phone in allPhones
+      },
+    ];
+
+    const result = await batchMergePhoneContacts('admin-1', input, 'OVERWRITE');
+    expect(result.updated).toBe(1);
+
+    const raw = await secureStorage.getItem('sf_local_customers_cache_v2');
+    const customers: Customer[] = JSON.parse(raw!);
+    const updated = customers.find((c) => c.id === 'cust-existing-1')!;
+    expect(updated.fullName).toBe('Anand Kumar (Updated Official)');
+    expect(updated.phone).toBe('9944001122');
+    // Previous phone moved to altPhone
+    expect(updated.altPhone).toBe('9840123456');
   });
 });

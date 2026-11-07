@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured, isValidUUID } from '@/lib/supabase/client';
-import { getActiveOrganizationId } from '@/lib/supabase/activeOrg';
+import { getActiveOrganizationId, DEFAULT_ORG_ID, setActiveOrganizationId } from '@/lib/supabase/activeOrg';
 import { Loan, LoanFilterParams } from './types';
 import { ScheduleInstallment } from '@/lib/finance/types';
 import { calculateLoanSchedule } from '@/lib/finance/schedule';
@@ -123,9 +123,12 @@ export async function fetchLoans(
       let query = supabase
         .from('loans')
         .select('*')
-        .eq('organization_id', orgId)
         .eq('is_deleted', false)
         .order('created_at', { ascending: false });
+
+      if (orgId && orgId !== DEFAULT_ORG_ID) {
+        query = query.eq('organization_id', orgId);
+      }
 
       if (params?.customerId) {
         query = query.eq('customer_id', params.customerId);
@@ -145,6 +148,12 @@ export async function fetchLoans(
 
       const { data, error } = await query;
       if (!error && data) {
+        if (data.length > 0 && (!orgId || orgId === DEFAULT_ORG_ID)) {
+          const detectedOrg = data[0].organization_id;
+          if (detectedOrg && detectedOrg !== DEFAULT_ORG_ID && isValidUUID(detectedOrg)) {
+            setActiveOrganizationId(detectedOrg);
+          }
+        }
         let domainList = data.map(loanRowToDomain);
         if (params?.search) {
           const s = params.search.toLowerCase().trim();

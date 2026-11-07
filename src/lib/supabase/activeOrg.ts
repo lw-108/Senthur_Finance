@@ -23,8 +23,18 @@ export async function getActiveOrganizationId(): Promise<string> {
   // 2. Query user's organizations from Supabase
   if (isSupabaseConfigured()) {
     try {
-      const { data: userRes } = await supabase.auth.getUser();
-      const currentUser = userRes?.user;
+      let currentUser: any = null;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        currentUser = sessionData?.session?.user || null;
+      } catch {}
+
+      if (!currentUser) {
+        try {
+          const { data: userRes } = await supabase.auth.getUser();
+          currentUser = userRes?.user || null;
+        } catch {}
+      }
 
       if (currentUser) {
         const { data: memberships, error } = await supabase

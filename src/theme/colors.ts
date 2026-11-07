@@ -63,28 +63,28 @@ export const ACCENT_PALETTES: Record<AccentColor, AccentPalette> = {
 
 export const THEME_CHART_SHADES: Record<AccentColor, { light: string[]; dark: string[] }> = {
   violet: {
-    light: ['#7C3AED', '#8B5CF6', '#A78BFA', '#6D28D9', '#C4B5FD', '#5B21B6', '#4C1D95', '#DDD6FE'],
-    dark: ['#A78BFA', '#C4B5FD', '#8B5CF6', '#7C3AED', '#DDD6FE', '#6D28D9', '#EDE9FE', '#5B21B6'],
+    light: ['#8B5CF6', '#7C3AED', '#A78BFA', '#6D28D9', '#C4B5FD', '#5B21B6', '#4C1D95', '#DDD6FE'],
+    dark: ['#8B5CF6', '#A78BFA', '#C4B5FD', '#7C3AED', '#DDD6FE', '#6D28D9', '#EDE9FE', '#5B21B6'],
   },
   blue: {
-    light: ['#2563EB', '#3B82F6', '#60A5FA', '#1D4ED8', '#93C5FD', '#1E40AF', '#1E3A8A', '#BFDBFE'],
-    dark: ['#60A5FA', '#93C5FD', '#3B82F6', '#2563EB', '#BFDBFE', '#1D4ED8', '#DBEAFE', '#1E40AF'],
+    light: ['#3B82F6', '#2563EB', '#60A5FA', '#1D4ED8', '#93C5FD', '#1E40AF', '#1E3A8A', '#BFDBFE'],
+    dark: ['#3B82F6', '#60A5FA', '#93C5FD', '#2563EB', '#BFDBFE', '#1D4ED8', '#DBEAFE', '#1E40AF'],
   },
   emerald: {
-    light: ['#059669', '#10B981', '#34D399', '#047857', '#6EE7B7', '#065F46', '#064E3B', '#A7F3D0'],
-    dark: ['#34D399', '#6EE7B7', '#10B981', '#059669', '#A7F3D0', '#047857', '#D1FAE5', '#065F46'],
+    light: ['#10B981', '#059669', '#34D399', '#047857', '#6EE7B7', '#065F46', '#064E3B', '#A7F3D0'],
+    dark: ['#10B981', '#34D399', '#6EE7B7', '#059669', '#A7F3D0', '#047857', '#D1FAE5', '#065F46'],
   },
   amber: {
-    light: ['#D97706', '#F59E0B', '#FBBF24', '#B45309', '#FCD34D', '#92400E', '#78350F', '#FDE68A'],
-    dark: ['#FBBF24', '#FCD34D', '#F59E0B', '#D97706', '#FDE68A', '#B45309', '#FEF3C7', '#92400E'],
+    light: ['#F59E0B', '#D97706', '#FBBF24', '#B45309', '#FCD34D', '#92400E', '#78350F', '#FDE68A'],
+    dark: ['#F59E0B', '#FBBF24', '#FCD34D', '#D97706', '#FDE68A', '#B45309', '#FEF3C7', '#92400E'],
   },
   rose: {
-    light: ['#E11D48', '#F43F5E', '#FB7185', '#BE123C', '#FDA4AF', '#9F1239', '#881337', '#FECDD3'],
-    dark: ['#FB7185', '#FDA4AF', '#F43F5E', '#E11D48', '#FECDD3', '#BE123C', '#FFE4E6', '#9F1239'],
+    light: ['#F43F5E', '#E11D48', '#FB7185', '#BE123C', '#FDA4AF', '#9F1239', '#881337', '#FECDD3'],
+    dark: ['#F43F5E', '#FB7185', '#FDA4AF', '#E11D48', '#FECDD3', '#BE123C', '#FFE4E6', '#9F1239'],
   },
   slate: {
-    light: ['#475569', '#64748B', '#94A3B8', '#334155', '#CBD5E1', '#1E293B', '#0F172A', '#E2E8F0'],
-    dark: ['#94A3B8', '#CBD5E1', '#64748B', '#475569', '#E2E8F0', '#334155', '#F1F5F9', '#1E293B'],
+    light: ['#64748B', '#475569', '#94A3B8', '#334155', '#CBD5E1', '#1E293B', '#0F172A', '#E2E8F0'],
+    dark: ['#64748B', '#94A3B8', '#CBD5E1', '#475569', '#E2E8F0', '#334155', '#F1F5F9', '#1E293B'],
   },
 };
 

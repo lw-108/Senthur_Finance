@@ -102,7 +102,12 @@ export function arePhonesEqual(p1: string | null | undefined, p2: string | null 
 export function matchesCustomerPhone(candidatePhone: string, customer: { phone?: string; altPhone?: string; whatsapp?: string }): boolean {
   if (!candidatePhone) return false;
   if (customer.phone && arePhonesEqual(candidatePhone, customer.phone)) return true;
-  if (customer.altPhone && arePhonesEqual(candidatePhone, customer.altPhone)) return true;
+  if (customer.altPhone) {
+    const parts = customer.altPhone.split(/[,;/]+/).map((s) => s.trim()).filter(Boolean);
+    for (const part of parts) {
+      if (arePhonesEqual(candidatePhone, part)) return true;
+    }
+  }
   if (customer.whatsapp && arePhonesEqual(candidatePhone, customer.whatsapp)) return true;
   return false;
 }
