@@ -2,6 +2,7 @@ import { idProofSchema } from '../src/features/customers/schemas';
 import { IdProof, IdProofType } from '../src/features/customers/types';
 import { validateKYCDocument, sanitizeKYCDocument } from '../src/utils/validators';
 import { isPdfDocument, isImageDocument, getDocumentDisplayName } from '../src/utils/documentUtils';
+import { PROOF_CATALOG } from '../src/features/customers/proofCatalog';
 
 describe('Customer KYC ID Proof Documents (PDF & Camera/Gallery Images)', () => {
   describe('isPdfDocument detection', () => {
@@ -278,6 +279,38 @@ describe('Customer KYC ID Proof Documents (PDF & Camera/Gallery Images)', () => 
       const proofToDeleteId = 'proof-1';
       const updatedList = customerProofs.filter((p) => p.id !== proofToDeleteId);
       expect(updatedList).toHaveLength(0);
+    });
+  });
+
+  describe('SelectProofTypeModal PROOF_CATALOG user selection', () => {
+    it('provides all 7 proof options for user selection without auto-defaulting', () => {
+      const catalogTypes = PROOF_CATALOG.map((p) => p.type);
+      expect(catalogTypes).toEqual([
+        'Aadhaar',
+        'PAN',
+        'Voter',
+        'RationCard',
+        'DrivingLicense',
+        'Passport',
+        'Other',
+      ]);
+      expect(PROOF_CATALOG).toHaveLength(7);
+    });
+
+    it('defines distinct titles, format hints, and icons for each proof type', () => {
+      PROOF_CATALOG.forEach((item) => {
+        expect(item.title.length).toBeGreaterThan(0);
+        expect(item.tagline.length).toBeGreaterThan(0);
+        expect(item.numberHint.length).toBeGreaterThan(0);
+        expect(item.icon.length).toBeGreaterThan(0);
+      });
+    });
+
+    it('PAN card specifies single side whereas Aadhaar and others support back side', () => {
+      const pan = PROOF_CATALOG.find((p) => p.type === 'PAN');
+      const aadhaar = PROOF_CATALOG.find((p) => p.type === 'Aadhaar');
+      expect(pan?.hasBackSide).toBe(false);
+      expect(aadhaar?.hasBackSide).toBe(true);
     });
   });
 });

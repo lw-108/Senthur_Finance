@@ -32,7 +32,9 @@ import {
   openOrShareDocument,
   DocumentPreviewModal,
 } from '@/features/customers/components/KYCDocumentPicker';
+import { SelectProofTypeModal } from '@/features/customers/components/SelectProofTypeModal';
 import { IdProof, IdProofType } from '@/features/customers/types';
+import { getStorageProvider } from '@/lib/storage';
 import { validateKYCDocument, sanitizeKYCDocument } from '@/utils/validators';
 import { useCustomer, useDeleteCustomer, useUpdateCustomer } from '@/features/customers/hooks';
 import { useLoans } from '@/features/loans/hooks';
@@ -119,7 +121,9 @@ export default function CustomerDetailScreen() {
   const [editScheme, setEditScheme] = useState('');
 
   // ID Proof Add / Edit Modal State
+  const [selectProofModalOpen, setSelectProofModalOpen] = useState(false);
   const [proofModalOpen, setProofModalOpen] = useState(false);
+  const [savingProof, setSavingProof] = useState(false);
   const [editingProofIndex, setEditingProofIndex] = useState<number | null>(null);
   const [proofType, setProofType] = useState<IdProofType>('Aadhaar');
   const [proofNumber, setProofNumber] = useState('');
@@ -133,20 +137,16 @@ export default function CustomerDetailScreen() {
   const [previewDocUri, setPreviewDocUri] = useState<string | null>(null);
   const [previewDocTitle, setPreviewDocTitle] = useState('Proof Document');
 
+  // Prompts user to choose which proof they want to select and upload next
   const handleOpenAddProof = () => {
     setEditingProofIndex(null);
-    const existingTypes = (customer?.idProofs || []).map((p) => p.type);
-    const nextType: IdProofType = !existingTypes.includes('Aadhaar')
-      ? 'Aadhaar'
-      : !existingTypes.includes('PAN')
-      ? 'PAN'
-      : !existingTypes.includes('Voter')
-      ? 'Voter'
-      : !existingTypes.includes('RationCard')
-      ? 'RationCard'
-      : 'Other';
+    setSelectProofModalOpen(true);
+  };
 
-    setProofType(nextType);
+  // Called when user selects their desired proof type from the catalog
+  const handleSelectProofType = (selectedType: IdProofType) => {
+    setEditingProofIndex(null);
+    setProofType(selectedType);
     setProofNumber('');
     setProofFrontUri('');
     setProofBackUri('');
@@ -181,34 +181,73 @@ export default function CustomerDetailScreen() {
       }
     }
 
-    const currentProofs = [...(customer.idProofs || [])];
-    const newProofData: IdProof = {
-      id: editingProofIndex !== null && currentProofs[editingProofIndex]
-        ? currentProofs[editingProofIndex].id
-        : `proof-${Date.now()}`,
-      type: proofType,
-      number: cleanNumber,
-      frontUrl: proofFrontUri || undefined,
-      backUrl: proofBackUri || undefined,
-      verified: true,
-    };
-
-    if (editingProofIndex !== null && editingProofIndex >= 0 && editingProofIndex < currentProofs.length) {
-      currentProofs[editingProofIndex] = newProofData;
-    } else {
-      currentProofs.push(newProofData);
-    }
+    setSavingProof(true);
+    setProofError('');
 
     try {
+      const storage = getStorageProvider();
+      let finalFrontUrl = proofFrontUri;
+      let finalBackUrl = proofBackUri;
+      let finalStoragePath: string | undefined = undefined;
+
+      // If front proof is a local file (from camera, gallery or doc picker), upload to Supabase Storage
+      if (proofFrontUri && (proofFrontUri.startsWith('file:') || proofFrontUri.startsWith('content:') || proofFrontUri.startsWith('blob:') || proofFrontUri.startsWith('data:'))) {
+        try {
+          const isPdf = isPdfDocument(proofFrontUri);
+          const ext = isPdf ? 'pdf' : 'jpg';
+          const dest = `customers/${customer.id}/proofs/${proofType.toLowerCase()}_front_${Date.now()}.${ext}`;
+          const uploadRes = await storage.uploadFile(proofFrontUri, dest, isPdf ? 'application/pdf' : 'image/jpeg');
+          finalFrontUrl = uploadRes.url;
+          finalStoragePath = uploadRes.storagePath;
+        } catch (err: any) {
+          console.warn('[Supabase Storage] Front proof upload error:', err);
+        }
+      }
+
+      // If back proof is a local file, upload to Supabase Storage
+      if (proofBackUri && (proofBackUri.startsWith('file:') || proofBackUri.startsWith('content:') || proofBackUri.startsWith('blob:') || proofBackUri.startsWith('data:'))) {
+        try {
+          const isPdf = isPdfDocument(proofBackUri);
+          const ext = isPdf ? 'pdf' : 'jpg';
+          const dest = `customers/${customer.id}/proofs/${proofType.toLowerCase()}_back_${Date.now()}.${ext}`;
+          const uploadRes = await storage.uploadFile(proofBackUri, dest, isPdf ? 'application/pdf' : 'image/jpeg');
+          finalBackUrl = uploadRes.url;
+        } catch (err: any) {
+          console.warn('[Supabase Storage] Back proof upload error:', err);
+        }
+      }
+
+      const currentProofs = [...(customer.idProofs || [])];
+      const newProofData: IdProof = {
+        id: editingProofIndex !== null && currentProofs[editingProofIndex]
+          ? currentProofs[editingProofIndex].id
+          : `proof-${Date.now()}`,
+        type: proofType,
+        number: cleanNumber,
+        frontUrl: finalFrontUrl || undefined,
+        backUrl: finalBackUrl || undefined,
+        storagePath: finalStoragePath,
+        verified: true,
+      };
+
+      if (editingProofIndex !== null && editingProofIndex >= 0 && editingProofIndex < currentProofs.length) {
+        currentProofs[editingProofIndex] = newProofData;
+      } else {
+        currentProofs.push(newProofData);
+      }
+
       await updateMutation.mutateAsync({
         customerId: customer.id,
         updates: { idProofs: currentProofs },
       });
       setProofModalOpen(false);
-      showSuccess(editingProofIndex !== null ? 'ID proof updated successfully' : 'New ID proof added successfully');
+      showSuccess(editingProofIndex !== null ? `${proofType} proof updated in Supabase successfully` : `${proofType} proof saved to Supabase successfully`);
       refetch();
     } catch (err: any) {
-      showError(err?.message || 'Failed to save ID proof');
+      showError(err?.message || 'Failed to save ID proof to Supabase');
+      setProofError(err?.message || 'Failed to save ID proof');
+    } finally {
+      setSavingProof(false);
     }
   };
 
@@ -1187,15 +1226,32 @@ export default function CustomerDetailScreen() {
 
             <View style={{ marginTop: 16 }}>
               <PillButton
-                title={editingProofIndex !== null ? 'Save Proof Changes' : 'Attach ID Proof to Customer'}
+                title={
+                  savingProof || updateMutation.isPending
+                    ? 'Saving to Supabase...'
+                    : editingProofIndex !== null
+                    ? 'Save Proof Changes to Supabase'
+                    : `Upload & Save ${proofType} Proof to Supabase`
+                }
                 onPress={handleSaveProof}
                 variant="primary"
+                loading={savingProof || updateMutation.isPending}
                 fullWidth
               />
             </View>
           </View>
         </View>
       </Modal>
+
+      {/* Select Which Proof to Upload Next Modal */}
+      <SelectProofTypeModal
+        visible={selectProofModalOpen}
+        onClose={() => setSelectProofModalOpen(false)}
+        existingTypes={(customer?.idProofs || []).map((p) => p.type)}
+        title="Which proof do you want to select and upload next?"
+        subtitle={`Select the ID or address document for ${customer?.fullName || 'customer'} to upload and save to Supabase.`}
+        onSelectProof={handleSelectProofType}
+      />
 
       {/* Full Document Preview Modal */}
       <DocumentPreviewModal

@@ -26,8 +26,10 @@ import { checkDuplicatePhone } from '@/features/customers/api';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useLoanProductsStore } from '@/store/useLoanProductsStore';
 import { KYCDocumentPicker, isPdfDocument } from '@/features/customers/components/KYCDocumentPicker';
+import { SelectProofTypeModal } from '@/features/customers/components/SelectProofTypeModal';
 import { IdProofType } from '@/features/customers/types';
 import { secureStorage } from '@/lib/storage/secureStorage';
+import { getStorageProvider } from '@/lib/storage';
 import {
   validateIndianPhone,
   sanitizePhone,
@@ -63,6 +65,7 @@ export default function NewCustomerScreen() {
 
   const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [selectProofModalOpen, setSelectProofModalOpen] = useState(false);
 
   const validateStep1 = async (): Promise<boolean> => {
     const errors: Record<string, string> = {};
@@ -213,6 +216,60 @@ export default function NewCustomerScreen() {
         pincode: draft.address.pincode?.trim() || '641001',
       };
 
+      // Upload local KYC ID proofs (camera photos, gallery images, PDF documents) to Supabase Storage
+      const storage = getStorageProvider();
+      const uploadedIdProofs = await Promise.all(
+        (draft.idProofs || []).map(async (proof) => {
+          let frontUrl = proof.frontUrl;
+          let backUrl = proof.backUrl;
+          let storagePath = proof.storagePath;
+
+          if (frontUrl && (frontUrl.startsWith('file:') || frontUrl.startsWith('content:') || frontUrl.startsWith('blob:') || frontUrl.startsWith('data:'))) {
+            try {
+              const isPdf = isPdfDocument(frontUrl);
+              const ext = isPdf ? 'pdf' : 'jpg';
+              const dest = `customers/proofs/${proof.id}_front_${Date.now()}.${ext}`;
+              const res = await storage.uploadFile(frontUrl, dest, isPdf ? 'application/pdf' : 'image/jpeg');
+              frontUrl = res.url;
+              storagePath = res.storagePath;
+            } catch (err) {
+              console.warn('[Supabase Storage] Front proof upload error, preserving local URI:', err);
+            }
+          }
+
+          if (backUrl && (backUrl.startsWith('file:') || backUrl.startsWith('content:') || backUrl.startsWith('blob:') || backUrl.startsWith('data:'))) {
+            try {
+              const isPdf = isPdfDocument(backUrl);
+              const ext = isPdf ? 'pdf' : 'jpg';
+              const dest = `customers/proofs/${proof.id}_back_${Date.now()}.${ext}`;
+              const res = await storage.uploadFile(backUrl, dest, isPdf ? 'application/pdf' : 'image/jpeg');
+              backUrl = res.url;
+            } catch (err) {
+              console.warn('[Supabase Storage] Back proof upload error, preserving local URI:', err);
+            }
+          }
+
+          return {
+            ...proof,
+            frontUrl,
+            backUrl,
+            storagePath,
+          };
+        })
+      );
+
+      // Upload profile picture if locally staged
+      let uploadedPhotoUrl = draft.photoUrl;
+      if (uploadedPhotoUrl && (uploadedPhotoUrl.startsWith('file:') || uploadedPhotoUrl.startsWith('content:') || uploadedPhotoUrl.startsWith('blob:') || uploadedPhotoUrl.startsWith('data:'))) {
+        try {
+          const dest = `customers/photos/avatar_${Date.now()}.jpg`;
+          const res = await storage.uploadFile(uploadedPhotoUrl, dest, 'image/jpeg');
+          uploadedPhotoUrl = res.url;
+        } catch (err) {
+          console.warn('[Supabase Storage] Customer avatar upload error:', err);
+        }
+      }
+
       await createCustomerMutation.mutateAsync({
         fullName: draft.fullName.trim(),
         nickname: draft.nickname || undefined,
@@ -221,9 +278,9 @@ export default function NewCustomerScreen() {
         email: draft.email || undefined,
         occupation: draft.occupation || undefined,
         monthlyIncome: draft.monthlyIncome ? draft.monthlyIncome * 100 : undefined,
-        photoUrl: draft.photoUrl || undefined,
+        photoUrl: uploadedPhotoUrl || undefined,
         address: cleanAddress,
-        idProofs: draft.idProofs || [],
+        idProofs: uploadedIdProofs,
         references: draft.references || [],
         guarantor: draft.guarantor.name
           ? {
@@ -592,7 +649,7 @@ export default function NewCustomerScreen() {
             );
           })}
 
-          {/* Add Another ID Proof Button */}
+          {/* Add Another ID Proof Button (Asks user to select proof type next) */}
           <TouchableOpacity
             style={{
               flexDirection: 'row',
@@ -609,29 +666,33 @@ export default function NewCustomerScreen() {
               marginTop: 4,
               marginBottom: 14,
             }}
-            onPress={() => {
-              const typesInUse = draft.idProofs.map((p) => p.type);
-              const nextType: IdProofType = !typesInUse.includes('PAN')
-                ? 'PAN'
-                : !typesInUse.includes('Voter')
-                ? 'Voter'
-                : !typesInUse.includes('RationCard')
-                ? 'RationCard'
-                : 'Other';
-
-              draft.addIdProof({
-                id: `proof-${Date.now()}`,
-                type: nextType,
-                number: '',
-                verified: false,
-              });
-            }}
+            onPress={() => setSelectProofModalOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Select which proof to upload next"
           >
             <Ionicons name="add-circle-outline" size={20} color={colors.primaryDark} />
             <Text style={{ fontFamily: typography.fontHeadline, fontSize: 13, fontWeight: '700', color: colors.primaryDark }}>
-              + Add Another ID Proof (e.g. PAN, Voter, Ration Card)
+              + Add Another ID Proof (Choose Proof Type)
             </Text>
           </TouchableOpacity>
+
+          {/* Modal asking user: Which proof do you want to select and upload next? */}
+          <SelectProofTypeModal
+            visible={selectProofModalOpen}
+            onClose={() => setSelectProofModalOpen(false)}
+            existingTypes={draft.idProofs.map((p) => p.type)}
+            title="Which proof do you want to select and upload next?"
+            subtitle="Choose the ID or address document you want to record and save to Supabase."
+            onSelectProof={(chosenType) => {
+              draft.addIdProof({
+                id: `proof-${Date.now()}`,
+                type: chosenType,
+                number: '',
+                verified: false,
+              });
+              showSuccess(`Selected ${chosenType} card. Enter document number and upload photo/PDF.`);
+            }}
+          />
         </View>
       )}
 
