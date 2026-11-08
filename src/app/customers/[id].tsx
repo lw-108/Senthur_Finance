@@ -189,6 +189,7 @@ export default function CustomerDetailScreen() {
       let finalFrontUrl = proofFrontUri;
       let finalBackUrl = proofBackUri;
       let finalStoragePath: string | undefined = undefined;
+      let isLocalSaved = false;
 
       // If front proof is a local file (from camera, gallery or doc picker), upload to Supabase Storage
       if (proofFrontUri && (proofFrontUri.startsWith('file:') || proofFrontUri.startsWith('content:') || proofFrontUri.startsWith('blob:') || proofFrontUri.startsWith('data:'))) {
@@ -199,8 +200,12 @@ export default function CustomerDetailScreen() {
           const uploadRes = await storage.uploadFile(proofFrontUri, dest, isPdf ? 'application/pdf' : 'image/jpeg');
           finalFrontUrl = uploadRes.url;
           finalStoragePath = uploadRes.storagePath;
+          if (uploadRes.isLocalFallback) {
+            isLocalSaved = true;
+          }
         } catch (err: any) {
-          console.warn('[Supabase Storage] Front proof upload error:', err);
+          console.warn('[Supabase Storage] Front proof upload error:', err?.message || err);
+          showError(`Storage Upload Warning: ${err?.message || 'Check Supabase bucket policies'}`);
         }
       }
 
@@ -212,8 +217,12 @@ export default function CustomerDetailScreen() {
           const dest = `customers/${customer.id}/proofs/${proofType.toLowerCase()}_back_${Date.now()}.${ext}`;
           const uploadRes = await storage.uploadFile(proofBackUri, dest, isPdf ? 'application/pdf' : 'image/jpeg');
           finalBackUrl = uploadRes.url;
+          if (uploadRes.isLocalFallback) {
+            isLocalSaved = true;
+          }
         } catch (err: any) {
-          console.warn('[Supabase Storage] Back proof upload error:', err);
+          console.warn('[Supabase Storage] Back proof upload error:', err?.message || err);
+          showError(`Storage Upload Warning: ${err?.message || 'Check Supabase bucket policies'}`);
         }
       }
 
@@ -241,7 +250,19 @@ export default function CustomerDetailScreen() {
         updates: { idProofs: currentProofs },
       });
       setProofModalOpen(false);
-      showSuccess(editingProofIndex !== null ? `${proofType} proof updated in Supabase successfully` : `${proofType} proof saved to Supabase successfully`);
+      if (isLocalSaved) {
+        showSuccess(
+          editingProofIndex !== null
+            ? `${proofType} proof updated (Saved locally - storage limit reached)`
+            : `${proofType} proof saved to local storage (Cloud limit reached)`
+        );
+      } else {
+        showSuccess(
+          editingProofIndex !== null
+            ? `${proofType} proof updated in Supabase successfully`
+            : `${proofType} proof saved to Supabase successfully`
+        );
+      }
       refetch();
     } catch (err: any) {
       showError(err?.message || 'Failed to save ID proof to Supabase');
@@ -789,8 +810,8 @@ export default function CustomerDetailScreen() {
                   {/* Top Row: Icon, Type, Number, Biometric Reveal, Edit & Delete */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                      <View style={[styles.proofIconWrap, { backgroundColor: dynamicColors.primarySoft }]}>
-                        <Ionicons name={iconName} size={20} color={dynamicColors.primaryDark} />
+                      <View style={[styles.proofIconWrap, { backgroundColor: dynamicColors.surfaceMuted }]}>
+                        <Ionicons name={iconName} size={20} color={dynamicColors.ink} />
                       </View>
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -802,6 +823,13 @@ export default function CustomerDetailScreen() {
                             label={proof.verified ? 'Verified' : 'Pending'}
                             size="sm"
                           />
+                          {proof.storagePath?.startsWith('local://') && (
+                            <Badge
+                              status="DRAFT"
+                              label="Local"
+                              size="sm"
+                            />
+                          )}
                         </View>
                         <Text style={[styles.proofNumber, { color: dynamicColors.textSecondary }]}>
                           {displayNum || 'Number Not Recorded'}
@@ -1001,12 +1029,14 @@ export default function CustomerDetailScreen() {
                       marginTop: 12,
                       paddingVertical: 7,
                       borderRadius: 8,
-                      backgroundColor: dynamicColors.primarySoft,
+                      backgroundColor: dynamicColors.surfaceMuted,
+                      borderWidth: 1,
+                      borderColor: dynamicColors.border,
                     }}
                     onPress={() => handleOpenEditProof(idx)}
                   >
-                    <Ionicons name="camera-outline" size={14} color={dynamicColors.primaryDark} />
-                    <Text style={{ fontFamily: typography.fontHeadline, fontSize: 11.5, fontWeight: '700', color: dynamicColors.primaryDark }}>
+                    <Ionicons name="camera-outline" size={14} color={dynamicColors.ink} />
+                    <Text style={{ fontFamily: typography.fontHeadline, fontSize: 11.5, fontWeight: '700', color: dynamicColors.ink }}>
                       Edit / Upload Photos & PDFs
                     </Text>
                   </TouchableOpacity>
@@ -1102,7 +1132,7 @@ export default function CustomerDetailScreen() {
               <View style={{ marginTop: 14, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: dynamicColors.border, backgroundColor: dynamicColors.surfaceMuted }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Ionicons name="card-outline" size={18} color={dynamicColors.primaryDark} />
+                    <Ionicons name="card-outline" size={18} color={dynamicColors.ink} />
                     <Text style={{ fontFamily: typography.fontHeadline, fontSize: 13, fontWeight: '700', color: dynamicColors.ink }}>
                       KYC Documents ({customer?.idProofs?.length || 0})
                     </Text>
@@ -1113,9 +1143,9 @@ export default function CustomerDetailScreen() {
                       setActiveTab('docs');
                       handleOpenAddProof();
                     }}
-                    style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: dynamicColors.primarySoft }}
+                    style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: dynamicColors.surface, borderWidth: 1, borderColor: dynamicColors.border }}
                   >
-                    <Text style={{ fontFamily: typography.fontHeadline, fontSize: 11, fontWeight: '700', color: dynamicColors.primaryDark }}>
+                    <Text style={{ fontFamily: typography.fontHeadline, fontSize: 11, fontWeight: '700', color: dynamicColors.ink }}>
                       + Add / Upload
                     </Text>
                   </TouchableOpacity>

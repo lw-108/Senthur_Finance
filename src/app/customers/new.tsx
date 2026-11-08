@@ -216,8 +216,9 @@ export default function NewCustomerScreen() {
         pincode: draft.address.pincode?.trim() || '641001',
       };
 
-      // Upload local KYC ID proofs (camera photos, gallery images, PDF documents) to Supabase Storage
+      // Upload local KYC ID proofs (camera photos, gallery images, PDF documents) to Supabase Storage (or persistent local fallback if limit reached)
       const storage = getStorageProvider();
+      let hasLocalFallback = false;
       const uploadedIdProofs = await Promise.all(
         (draft.idProofs || []).map(async (proof) => {
           let frontUrl = proof.frontUrl;
@@ -232,6 +233,7 @@ export default function NewCustomerScreen() {
               const res = await storage.uploadFile(frontUrl, dest, isPdf ? 'application/pdf' : 'image/jpeg');
               frontUrl = res.url;
               storagePath = res.storagePath;
+              if (res.isLocalFallback) hasLocalFallback = true;
             } catch (err) {
               console.warn('[Supabase Storage] Front proof upload error, preserving local URI:', err);
             }
@@ -244,6 +246,7 @@ export default function NewCustomerScreen() {
               const dest = `customers/proofs/${proof.id}_back_${Date.now()}.${ext}`;
               const res = await storage.uploadFile(backUrl, dest, isPdf ? 'application/pdf' : 'image/jpeg');
               backUrl = res.url;
+              if (res.isLocalFallback) hasLocalFallback = true;
             } catch (err) {
               console.warn('[Supabase Storage] Back proof upload error, preserving local URI:', err);
             }
@@ -303,7 +306,11 @@ export default function NewCustomerScreen() {
         status: 'Active',
       });
 
-      showSuccess(`${draft.fullName} added successfully!`);
+      if (hasLocalFallback) {
+        showSuccess(`${draft.fullName} added (proofs saved to local storage due to storage limit).`);
+      } else {
+        showSuccess(`${draft.fullName} added successfully!`);
+      }
       draft.resetDraft();
       await secureStorage.setItem('loanledger_last_active_route', '/');
       if (router.canGoBack()) {
@@ -660,8 +667,8 @@ export default function NewCustomerScreen() {
               borderRadius: radii.sm + 4,
               borderWidth: 1.5,
               borderStyle: 'dashed',
-              borderColor: colors.primaryDark,
-              backgroundColor: colors.primarySoft,
+              borderColor: colors.border,
+              backgroundColor: colors.surfaceMuted,
               gap: 8,
               marginTop: 4,
               marginBottom: 14,
@@ -670,8 +677,8 @@ export default function NewCustomerScreen() {
             accessibilityRole="button"
             accessibilityLabel="Select which proof to upload next"
           >
-            <Ionicons name="add-circle-outline" size={20} color={colors.primaryDark} />
-            <Text style={{ fontFamily: typography.fontHeadline, fontSize: 13, fontWeight: '700', color: colors.primaryDark }}>
+            <Ionicons name="add-circle-outline" size={20} color={colors.ink} />
+            <Text style={{ fontFamily: typography.fontHeadline, fontSize: 13, fontWeight: '700', color: colors.ink }}>
               + Add Another ID Proof (Choose Proof Type)
             </Text>
           </TouchableOpacity>

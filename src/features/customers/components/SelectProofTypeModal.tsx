@@ -64,20 +64,20 @@ export function SelectProofTypeModal({
                   <View
                     style={[
                       styles.headerIconWrap,
-                      { backgroundColor: dynamicColors.primarySoft },
+                      { backgroundColor: dynamicColors.surfaceMuted },
                     ]}
                   >
                     <Ionicons
                       name="shield-checkmark"
                       size={22}
-                      color={dynamicColors.primaryDark}
+                      color={dynamicColors.ink}
                     />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text
                       style={[
                         styles.title,
-                        { color: dynamicColors.headingPrimary || dynamicColors.ink },
+                        { color: dynamicColors.ink },
                       ]}
                     >
                       {title}
@@ -96,7 +96,7 @@ export function SelectProofTypeModal({
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     style={[
                       styles.closeBtn,
-                      { backgroundColor: isDark ? '#2D3748' : '#F1F5F9' },
+                      { backgroundColor: dynamicColors.surfaceMuted },
                     ]}
                     accessibilityRole="button"
                     accessibilityLabel="Close proof picker"
@@ -127,10 +127,8 @@ export function SelectProofTypeModal({
                       style={[
                         styles.optionItem,
                         {
-                          backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
-                          borderColor: isAlreadyAdded
-                            ? (isDark ? '#334155' : '#E2E8F0')
-                            : (isDark ? '#334155' : dynamicColors.primaryBorder),
+                          backgroundColor: dynamicColors.surface,
+                          borderColor: dynamicColors.border,
                         },
                       ]}
                     >
@@ -139,16 +137,14 @@ export function SelectProofTypeModal({
                         style={[
                           styles.optionIconWrap,
                           {
-                            backgroundColor: isDark
-                              ? `${dynamicColors.primary}20`
-                              : dynamicColors.primarySoft,
+                            backgroundColor: dynamicColors.surfaceMuted,
                           },
                         ]}
                       >
                         <Ionicons
                           name={proof.icon as any}
                           size={22}
-                          color={dynamicColors.primaryDark}
+                          color={dynamicColors.ink}
                         />
                       </View>
 
@@ -168,15 +164,28 @@ export function SelectProofTypeModal({
                               style={[
                                 styles.badgeAdded,
                                 {
-                                  backgroundColor: isDark ? '#1E3A8A' : '#EFF6FF',
-                                  borderColor: isDark ? '#3B82F6' : '#93C5FD',
+                                  backgroundColor: isDark
+                                    ? `${dynamicColors.primary}25`
+                                    : dynamicColors.primarySoft,
+                                  borderColor: isDark
+                                    ? `${dynamicColors.primary}60`
+                                    : dynamicColors.primaryBorder,
                                 },
                               ]}
                             >
+                              <Ionicons
+                                name="checkmark-circle"
+                                size={12}
+                                color={isDark ? dynamicColors.primary : dynamicColors.primaryDark}
+                              />
                               <Text
                                 style={[
                                   styles.badgeAddedText,
-                                  { color: dynamicColors.primaryDark },
+                                  {
+                                    color: isDark
+                                      ? dynamicColors.primary
+                                      : dynamicColors.primaryDark,
+                                  },
                                 ]}
                               >
                                 {alreadyCount > 1 ? `${alreadyCount} Added` : 'Added'}
@@ -207,9 +216,9 @@ export function SelectProofTypeModal({
                       {/* Right Action Arrow */}
                       <View style={styles.optionRightArrow}>
                         <Ionicons
-                          name="add-circle"
-                          size={22}
-                          color={dynamicColors.primary}
+                          name="chevron-forward"
+                          size={18}
+                          color={dynamicColors.textSecondary}
                         />
                       </View>
                     </TouchableOpacity>
@@ -224,7 +233,7 @@ export function SelectProofTypeModal({
                   style={[
                     styles.cancelBtn,
                     {
-                      backgroundColor: isDark ? '#334155' : '#F1F5F9',
+                      backgroundColor: dynamicColors.surfaceMuted,
                       borderColor: dynamicColors.border,
                     },
                   ]}
@@ -336,13 +345,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   badgeAdded: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
     borderWidth: 1,
   },
   badgeAddedText: {
-    fontSize: 10,
+    fontFamily: typography.fontHeadline,
+    fontSize: 10.5,
     fontWeight: '700',
   },
   optionTagline: {

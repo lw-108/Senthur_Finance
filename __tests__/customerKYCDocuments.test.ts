@@ -313,4 +313,55 @@ describe('Customer KYC ID Proof Documents (PDF & Camera/Gallery Images)', () => 
       expect(aadhaar?.hasBackSide).toBe(true);
     });
   });
+
+  describe('Storage Limit Detection & Local Storage Fallback', () => {
+    // Dynamic import to test helper functions
+    const {
+      isStorageLimitError,
+      saveToPermanentLocalStorage,
+      uint8ArrayToBase64,
+    } = require('../src/lib/storage/supabaseStorage');
+
+    it('correctly detects HTTP 413 Payload Too Large as storage limit error', () => {
+      expect(isStorageLimitError({ statusCode: 413, message: 'Payload too large' })).toBe(true);
+      expect(isStorageLimitError({ status: 413, error: 'PayloadTooLarge' })).toBe(true);
+      expect(isStorageLimitError({ statusCode: '413', message: 'The object exceeded the maximum allowed size' })).toBe(true);
+    });
+
+    it('correctly detects storage limit and quota messages in HTTP 400 responses', () => {
+      expect(isStorageLimitError({ statusCode: 400, message: 'The project has reached its storage limit.' })).toBe(true);
+      expect(isStorageLimitError({ statusCode: 400, message: 'Bucket storage quota exceeded' })).toBe(true);
+      expect(isStorageLimitError({ statusCode: 400, message: 'exceeded the maximum allowed size' })).toBe(true);
+      expect(isStorageLimitError({ statusCode: 507, message: 'Insufficient Storage' })).toBe(true);
+      expect(isStorageLimitError({ message: 'Free tier limit reached for storage' })).toBe(true);
+    });
+
+    it('does not flag unrelated errors as storage limit errors', () => {
+      expect(isStorageLimitError({ statusCode: 404, message: 'Object not found' })).toBe(false);
+      expect(isStorageLimitError({ statusCode: 403, message: 'row-level security policy violated' })).toBe(false);
+      expect(isStorageLimitError(null)).toBe(false);
+      expect(isStorageLimitError(undefined)).toBe(false);
+    });
+
+    it('uint8ArrayToBase64 serializes bytes accurately across all platforms', () => {
+      const bytes = new Uint8Array([72, 101, 108, 108, 111]); // "Hello"
+      const b64 = uint8ArrayToBase64(bytes);
+      expect(b64).toBe('SGVsbG8=');
+    });
+
+    it('saveToPermanentLocalStorage returns valid UploadResult with isLocalFallback: true', async () => {
+      const payload = new Uint8Array([1, 2, 3, 4]);
+      const res = await saveToPermanentLocalStorage(
+        'data:image/jpeg;base64,AQIDBA==',
+        'customers/123/proofs/aadhaar_front.jpg',
+        'image/jpeg',
+        payload
+      );
+
+      expect(res.isLocalFallback).toBe(true);
+      expect(res.storagePath).toBe('local://customers/123/proofs/aadhaar_front.jpg');
+      expect(res.mime).toBe('image/jpeg');
+      expect(res.url).toBeTruthy();
+    });
+  });
 });

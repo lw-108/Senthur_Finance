@@ -227,7 +227,7 @@ export function KYCDocumentPicker({
         });
       } else {
         result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: ['images'],
           quality: 0.8,
           allowsEditing: false,
         });
@@ -332,13 +332,13 @@ export function KYCDocumentPicker({
             <View
               style={[
                 styles.typeTag,
-                { backgroundColor: isPdf ? 'rgba(239, 68, 68, 0.12)' : dynamicColors.primarySoft },
+                { backgroundColor: isPdf ? 'rgba(239, 68, 68, 0.12)' : dynamicColors.surfaceMuted },
               ]}
             >
               <Text
                 style={[
                   styles.typeTagText,
-                  { color: isPdf ? dynamicColors.danger : dynamicColors.primaryDark },
+                  { color: isPdf ? dynamicColors.danger : dynamicColors.ink },
                 ]}
               >
                 {isPdf ? 'PDF' : 'IMAGE'}
@@ -398,8 +398,8 @@ export function KYCDocumentPicker({
                 onPress={() => showPickOptions(side)}
                 disabled={disabled}
               >
-                <Ionicons name="camera-reverse-outline" size={14} color={dynamicColors.primaryDark} />
-                <Text style={[styles.cardActionText, { color: dynamicColors.primaryDark }]}>Change</Text>
+                <Ionicons name="camera-reverse-outline" size={14} color={dynamicColors.ink} />
+                <Text style={[styles.cardActionText, { color: dynamicColors.ink }]}>Change</Text>
               </TouchableOpacity>
 
               <View style={[styles.actionDivider, { backgroundColor: dynamicColors.border }]} />
@@ -423,7 +423,7 @@ export function KYCDocumentPicker({
             style={[
               styles.uploadPlaceholder,
               {
-                backgroundColor: dynamicColors.surface,
+                backgroundColor: dynamicColors.surfaceMuted,
                 borderColor: dynamicColors.border,
               },
             ]}
@@ -435,10 +435,10 @@ export function KYCDocumentPicker({
               <ActivityIndicator color={dynamicColors.primary} />
             ) : (
               <>
-                <View style={[styles.placeholderIconWrap, { backgroundColor: dynamicColors.primarySoft }]}>
-                  <Ionicons name="camera-outline" size={22} color={dynamicColors.primaryDark} />
+                <View style={[styles.placeholderIconWrap, { backgroundColor: dynamicColors.surface }]}>
+                  <Ionicons name="camera-outline" size={22} color={dynamicColors.ink} />
                 </View>
-                <Text style={[styles.uploadText, { color: dynamicColors.primaryDark }]}>
+                <Text style={[styles.uploadText, { color: dynamicColors.ink }]}>
                   {isFront ? 'Upload Front Proof' : 'Upload Back Proof'}
                 </Text>
                 <Text style={[styles.uploadSubtext, { color: dynamicColors.textTertiary }]}>
@@ -480,8 +480,8 @@ export function KYCDocumentPicker({
             ]}
           >
             <View style={styles.sourceModalHeader}>
-              <View style={[styles.sourceIconBadge, { backgroundColor: dynamicColors.primarySoft }]}>
-                <Ionicons name="document-attach" size={22} color={dynamicColors.primaryDark} />
+              <View style={[styles.sourceIconBadge, { backgroundColor: dynamicColors.surfaceMuted }]}>
+                <Ionicons name="document-attach" size={22} color={dynamicColors.ink} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sourceModalTitle, { color: dynamicColors.ink }]}>

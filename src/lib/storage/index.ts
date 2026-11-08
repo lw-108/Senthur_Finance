@@ -9,6 +9,7 @@ export interface UploadResult {
   storagePath: string;
   sizeBytes?: number;
   mime?: string;
+  isLocalFallback?: boolean;
 }
 
 export interface StorageProvider {
@@ -94,4 +95,4 @@ export function getStorageProvider(): StorageProvider {
 }
 
 export const defaultStorage = getStorageProvider();
-export { SupabaseStorageProvider };
+export { SupabaseStorageProvider, isStorageLimitError, saveToPermanentLocalStorage } from './supabaseStorage';

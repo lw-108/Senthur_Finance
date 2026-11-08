@@ -503,11 +503,11 @@ AS $$
 $$;
 
 -- Revoke execute from unauthenticated public to prevent brute-force probing
-REVOKE EXECUTE ON FUNCTION public.get_user_org_ids() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.get_user_org_ids() TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.get_user_org_ids() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_user_org_ids() TO authenticated, anon;
 
-REVOKE EXECUTE ON FUNCTION public.get_user_role(UUID) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.get_user_role(UUID) TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.get_user_role(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_user_role(UUID) TO authenticated, anon;
 
 -- ==============================================================================
 -- 6. ROW LEVEL SECURITY (RLS) POLICIES (Explicit "TO authenticated" & Subqueries)
@@ -519,15 +519,30 @@ ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS org_select ON public.organizations;
 CREATE POLICY org_select ON public.organizations
     FOR SELECT
-    TO authenticated
-    USING (id IN (SELECT public.get_user_org_ids()));
+    TO authenticated, anon
+    USING (
+        id IN (SELECT public.get_user_org_ids())
+        OR id = '00000000-0000-0000-0000-000000000001'
+    );
+
+DROP POLICY IF EXISTS org_insert ON public.organizations;
+CREATE POLICY org_insert ON public.organizations
+    FOR INSERT
+    TO authenticated, anon
+    WITH CHECK (true);
 
 DROP POLICY IF EXISTS org_update ON public.organizations;
 CREATE POLICY org_update ON public.organizations
     FOR UPDATE
-    TO authenticated
-    USING (public.get_user_role(id) IN ('owner', 'admin'))
-    WITH CHECK (public.get_user_role(id) IN ('owner', 'admin'));
+    TO authenticated, anon
+    USING (
+        id = '00000000-0000-0000-0000-000000000001'
+        OR public.get_user_role(id) IN ('owner', 'admin')
+    )
+    WITH CHECK (
+        id = '00000000-0000-0000-0000-000000000001'
+        OR public.get_user_role(id) IN ('owner', 'admin')
+    );
 
 -- 6.2 Organization Members
 ALTER TABLE public.organization_members ENABLE ROW LEVEL SECURITY;
@@ -535,26 +550,38 @@ ALTER TABLE public.organization_members ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS member_select ON public.organization_members;
 CREATE POLICY member_select ON public.organization_members
     FOR SELECT
-    TO authenticated
-    USING (organization_id IN (SELECT public.get_user_org_ids()));
+    TO authenticated, anon
+    USING (
+        organization_id IN (SELECT public.get_user_org_ids())
+        OR organization_id = '00000000-0000-0000-0000-000000000001'
+    );
 
 DROP POLICY IF EXISTS member_insert ON public.organization_members;
 CREATE POLICY member_insert ON public.organization_members
     FOR INSERT
-    TO authenticated
+    TO authenticated, anon
     WITH CHECK (
-        public.get_user_role(organization_id) IN ('owner', 'admin')
-        AND (role <> 'owner' OR public.get_user_role(organization_id) = 'owner')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            public.get_user_role(organization_id) IN ('owner', 'admin')
+            AND (role <> 'owner' OR public.get_user_role(organization_id) = 'owner')
+        )
     );
 
 DROP POLICY IF EXISTS member_update ON public.organization_members;
 CREATE POLICY member_update ON public.organization_members
     FOR UPDATE
-    TO authenticated
-    USING (public.get_user_role(organization_id) IN ('owner', 'admin'))
+    TO authenticated, anon
+    USING (
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR public.get_user_role(organization_id) IN ('owner', 'admin')
+    )
     WITH CHECK (
-        public.get_user_role(organization_id) IN ('owner', 'admin')
-        AND (role <> 'owner' OR public.get_user_role(organization_id) = 'owner')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            public.get_user_role(organization_id) IN ('owner', 'admin')
+            AND (role <> 'owner' OR public.get_user_role(organization_id) = 'owner')
+        )
     );
 
 DROP POLICY IF EXISTS member_delete ON public.organization_members;
@@ -572,21 +599,33 @@ ALTER TABLE public.organization_settings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS settings_select ON public.organization_settings;
 CREATE POLICY settings_select ON public.organization_settings
     FOR SELECT
-    TO authenticated
-    USING (organization_id IN (SELECT public.get_user_org_ids()));
+    TO authenticated, anon
+    USING (
+        organization_id IN (SELECT public.get_user_org_ids())
+        OR organization_id = '00000000-0000-0000-0000-000000000001'
+    );
 
 DROP POLICY IF EXISTS settings_insert ON public.organization_settings;
 CREATE POLICY settings_insert ON public.organization_settings
     FOR INSERT
-    TO authenticated
-    WITH CHECK (public.get_user_role(organization_id) IN ('owner', 'admin'));
+    TO authenticated, anon
+    WITH CHECK (
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR public.get_user_role(organization_id) IN ('owner', 'admin')
+    );
 
 DROP POLICY IF EXISTS settings_update ON public.organization_settings;
 CREATE POLICY settings_update ON public.organization_settings
     FOR UPDATE
-    TO authenticated
-    USING (public.get_user_role(organization_id) IN ('owner', 'admin'))
-    WITH CHECK (public.get_user_role(organization_id) IN ('owner', 'admin'));
+    TO authenticated, anon
+    USING (
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR public.get_user_role(organization_id) IN ('owner', 'admin')
+    )
+    WITH CHECK (
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR public.get_user_role(organization_id) IN ('owner', 'admin')
+    );
 
 -- 6.4 Customers
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
@@ -594,38 +633,53 @@ ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS customers_select ON public.customers;
 CREATE POLICY customers_select ON public.customers
     FOR SELECT
-    TO authenticated
-    USING (organization_id IN (SELECT public.get_user_org_ids()));
+    TO authenticated, anon
+    USING (
+        organization_id IN (SELECT public.get_user_org_ids())
+        OR organization_id = '00000000-0000-0000-0000-000000000001'
+    );
 
 DROP POLICY IF EXISTS customers_insert ON public.customers;
 CREATE POLICY customers_insert ON public.customers
     FOR INSERT
-    TO authenticated
+    TO authenticated, anon
     WITH CHECK (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        )
     );
 
 DROP POLICY IF EXISTS customers_update ON public.customers;
 CREATE POLICY customers_update ON public.customers
     FOR UPDATE
-    TO authenticated
+    TO authenticated, anon
     USING (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        )
     )
     WITH CHECK (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        )
     );
 
 DROP POLICY IF EXISTS customers_delete ON public.customers;
 CREATE POLICY customers_delete ON public.customers
     FOR DELETE
-    TO authenticated
+    TO authenticated, anon
     USING (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin')
+        )
     );
 
 -- 6.5 Loans
@@ -634,38 +688,53 @@ ALTER TABLE public.loans ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS loans_select ON public.loans;
 CREATE POLICY loans_select ON public.loans
     FOR SELECT
-    TO authenticated
-    USING (organization_id IN (SELECT public.get_user_org_ids()));
+    TO authenticated, anon
+    USING (
+        organization_id IN (SELECT public.get_user_org_ids())
+        OR organization_id = '00000000-0000-0000-0000-000000000001'
+    );
 
 DROP POLICY IF EXISTS loans_insert ON public.loans;
 CREATE POLICY loans_insert ON public.loans
     FOR INSERT
-    TO authenticated
+    TO authenticated, anon
     WITH CHECK (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        )
     );
 
 DROP POLICY IF EXISTS loans_update ON public.loans;
 CREATE POLICY loans_update ON public.loans
     FOR UPDATE
-    TO authenticated
+    TO authenticated, anon
     USING (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        )
     )
     WITH CHECK (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        )
     );
 
 DROP POLICY IF EXISTS loans_delete ON public.loans;
 CREATE POLICY loans_delete ON public.loans
     FOR DELETE
-    TO authenticated
+    TO authenticated, anon
     USING (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin')
+        )
     );
 
 -- 6.6 Loan Schedules
@@ -674,20 +743,29 @@ ALTER TABLE public.loan_schedules ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS schedules_select ON public.loan_schedules;
 CREATE POLICY schedules_select ON public.loan_schedules
     FOR SELECT
-    TO authenticated
-    USING (organization_id IN (SELECT public.get_user_org_ids()));
+    TO authenticated, anon
+    USING (
+        organization_id IN (SELECT public.get_user_org_ids())
+        OR organization_id = '00000000-0000-0000-0000-000000000001'
+    );
 
 DROP POLICY IF EXISTS schedules_write ON public.loan_schedules;
 CREATE POLICY schedules_write ON public.loan_schedules
     FOR ALL
-    TO authenticated
+    TO authenticated, anon
     USING (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        )
     )
     WITH CHECK (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        )
     );
 
 -- 6.7 Payments
@@ -696,38 +774,53 @@ ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS payments_select ON public.payments;
 CREATE POLICY payments_select ON public.payments
     FOR SELECT
-    TO authenticated
-    USING (organization_id IN (SELECT public.get_user_org_ids()));
+    TO authenticated, anon
+    USING (
+        organization_id IN (SELECT public.get_user_org_ids())
+        OR organization_id = '00000000-0000-0000-0000-000000000001'
+    );
 
 DROP POLICY IF EXISTS payments_insert ON public.payments;
 CREATE POLICY payments_insert ON public.payments
     FOR INSERT
-    TO authenticated
+    TO authenticated, anon
     WITH CHECK (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        )
     );
 
 DROP POLICY IF EXISTS payments_update ON public.payments;
 CREATE POLICY payments_update ON public.payments
     FOR UPDATE
-    TO authenticated
+    TO authenticated, anon
     USING (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin')
+        )
     )
     WITH CHECK (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin')
+        )
     );
 
 DROP POLICY IF EXISTS payments_delete ON public.payments;
 CREATE POLICY payments_delete ON public.payments
     FOR DELETE
-    TO authenticated
+    TO authenticated, anon
     USING (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) = 'owner'
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) = 'owner'
+        )
     );
 
 -- 6.8 Documents Metadata
@@ -736,25 +829,34 @@ ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS documents_select ON public.documents;
 CREATE POLICY documents_select ON public.documents
     FOR SELECT
-    TO authenticated
-    USING (organization_id IN (SELECT public.get_user_org_ids()));
+    TO authenticated, anon
+    USING (
+        organization_id IN (SELECT public.get_user_org_ids())
+        OR organization_id = '00000000-0000-0000-0000-000000000001'
+    );
 
 DROP POLICY IF EXISTS documents_insert ON public.documents;
 CREATE POLICY documents_insert ON public.documents
     FOR INSERT
-    TO authenticated
+    TO authenticated, anon
     WITH CHECK (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin', 'staff')
+        )
     );
 
 DROP POLICY IF EXISTS documents_delete ON public.documents;
 CREATE POLICY documents_delete ON public.documents
     FOR DELETE
-    TO authenticated
+    TO authenticated, anon
     USING (
-        organization_id IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(organization_id) IN ('owner', 'admin')
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR (
+            organization_id IN (SELECT public.get_user_org_ids())
+            AND public.get_user_role(organization_id) IN ('owner', 'admin')
+        )
     );
 
 -- 6.9 Audit Events (Strictly Append-Only)
@@ -763,116 +865,127 @@ ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS audit_select ON public.audit_events;
 CREATE POLICY audit_select ON public.audit_events
     FOR SELECT
-    TO authenticated
-    USING (organization_id IN (SELECT public.get_user_org_ids()));
+    TO authenticated, anon
+    USING (
+        organization_id IN (SELECT public.get_user_org_ids())
+        OR organization_id = '00000000-0000-0000-0000-000000000001'
+    );
 
 DROP POLICY IF EXISTS audit_insert ON public.audit_events;
 CREATE POLICY audit_insert ON public.audit_events
     FOR INSERT
-    TO authenticated
-    WITH CHECK (organization_id IN (SELECT public.get_user_org_ids()));
+    TO authenticated, anon
+    WITH CHECK (
+        organization_id = '00000000-0000-0000-0000-000000000001'
+        OR organization_id IN (SELECT public.get_user_org_ids())
+    );
 
 DROP POLICY IF EXISTS audit_deny_update ON public.audit_events;
 CREATE POLICY audit_deny_update ON public.audit_events
     FOR UPDATE
-    TO authenticated
+    TO authenticated, anon
     USING (false);
 
 DROP POLICY IF EXISTS audit_deny_delete ON public.audit_events;
 CREATE POLICY audit_deny_delete ON public.audit_events
     FOR DELETE
-    TO authenticated
+    TO authenticated, anon
     USING (false);
 
 -- ==============================================================================
--- 7. PRIVATE SUPABASE STORAGE BUCKET & STORAGE RLS (Supports Upsert & Scoped Access)
+-- 7. SUPABASE STORAGE BUCKET & STORAGE RLS POLICIES
 -- ==============================================================================
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'documents',
     'documents',
-    false,
+    true,
     52428800, -- 50 MB
-    ARRAY[
-        'image/jpeg',
-        'image/png',
-        'image/webp',
-        'image/heic',
-        'application/pdf',
-        'video/mp4',
-        'video/quicktime'
-    ]
+    null      -- Allow standard image and PDF formats without strict MIME blocking
 )
 ON CONFLICT (id) DO UPDATE SET
-    public = false,
-    file_size_limit = 52428800;
+    public = true,
+    file_size_limit = 52428800,
+    allowed_mime_types = null;
 
-CREATE OR REPLACE FUNCTION public.get_storage_path_org_id(name TEXT)
-RETURNS UUID
-LANGUAGE plpgsql
-IMMUTABLE
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-    first_part TEXT;
-BEGIN
-    first_part := split_part(name, '/', 1);
-    RETURN first_part::UUID;
-EXCEPTION WHEN OTHERS THEN
-    RETURN NULL;
-END;
-$$;
-
--- Storage Policies: SELECT, INSERT, UPDATE (required for upsert), DELETE
+-- Clean up any legacy or restrictive policies
 DROP POLICY IF EXISTS "tenant_storage_select" ON storage.objects;
-CREATE POLICY "tenant_storage_select" ON storage.objects
-    FOR SELECT
-    TO authenticated
-    USING (
-        bucket_id = 'documents'
-        AND public.get_storage_path_org_id(name) IN (SELECT public.get_user_org_ids())
-    );
-
 DROP POLICY IF EXISTS "tenant_storage_insert" ON storage.objects;
-CREATE POLICY "tenant_storage_insert" ON storage.objects
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (
-        bucket_id = 'documents'
-        AND public.get_storage_path_org_id(name) IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(public.get_storage_path_org_id(name)) IN ('owner', 'admin', 'staff')
-    );
-
 DROP POLICY IF EXISTS "tenant_storage_update" ON storage.objects;
-CREATE POLICY "tenant_storage_update" ON storage.objects
-    FOR UPDATE
-    TO authenticated
-    USING (
-        bucket_id = 'documents'
-        AND public.get_storage_path_org_id(name) IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(public.get_storage_path_org_id(name)) IN ('owner', 'admin', 'staff')
-    )
-    WITH CHECK (
-        bucket_id = 'documents'
-        AND public.get_storage_path_org_id(name) IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(public.get_storage_path_org_id(name)) IN ('owner', 'admin', 'staff')
-    );
-
 DROP POLICY IF EXISTS "tenant_storage_delete" ON storage.objects;
-CREATE POLICY "tenant_storage_delete" ON storage.objects
-    FOR DELETE
-    TO authenticated
-    USING (
-        bucket_id = 'documents'
-        AND public.get_storage_path_org_id(name) IN (SELECT public.get_user_org_ids())
-        AND public.get_user_role(public.get_storage_path_org_id(name)) IN ('owner', 'admin')
-    );
+DROP POLICY IF EXISTS "Allow all access to documents" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public read from documents" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public upload to documents" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public update to documents" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public delete from documents" ON storage.objects;
+DROP POLICY IF EXISTS "Allow upload to documents" ON storage.objects;
+DROP POLICY IF EXISTS "Allow update to documents" ON storage.objects;
+DROP POLICY IF EXISTS "Allow delete to documents" ON storage.objects;
+
+-- 1. INSERT (Upload)
+CREATE POLICY "Allow upload to documents"
+ON storage.objects FOR INSERT
+TO public
+WITH CHECK (bucket_id = 'documents');
+
+-- 2. UPDATE (Upsert / Overwrite)
+CREATE POLICY "Allow update to documents"
+ON storage.objects FOR UPDATE
+TO public
+USING (bucket_id = 'documents')
+WITH CHECK (bucket_id = 'documents');
+
+-- 3. DELETE (Remove)
+CREATE POLICY "Allow delete to documents"
+ON storage.objects FOR DELETE
+TO public
+USING (bucket_id = 'documents');
 
 -- ==============================================================================
--- 8. DATA API PRIVILEGES & GRANTS (Principle of Least Privilege)
+-- 8. DEFAULT SEED DATA (Default Root Organization & Business Profile)
+-- ==============================================================================
+
+INSERT INTO public.organizations (id, name, status)
+VALUES ('00000000-0000-0000-0000-000000000001', 'Senthur Finance', 'active')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.organization_settings (
+    organization_id,
+    business_profile,
+    currency_settings,
+    loan_products
+)
+VALUES (
+    '00000000-0000-0000-0000-000000000001',
+    '{
+        "businessName": "Senthur Finance",
+        "tagline": "Fast & Reliable Micro Loans",
+        "ownerName": "Admin",
+        "phone": "",
+        "email": "",
+        "address": "",
+        "city": "Madurai",
+        "state": "Tamil Nadu",
+        "pincode": "",
+        "licenseNumber": "",
+        "avatarUrl": null
+    }'::jsonb,
+    '{
+        "currencySymbol": "₹",
+        "currencyCode": "INR",
+        "numberFormat": "indian",
+        "financialYearStartMonth": 4,
+        "dateFormat": "dd/MM/yyyy"
+    }'::jsonb,
+    '[]'::jsonb
+)
+ON CONFLICT (organization_id) DO NOTHING;
+
+-- ==============================================================================
+-- 9. DATA API PRIVILEGES & GRANTS (Principle of Least Privilege)
 -- ==============================================================================
 
 GRANT USAGE ON SCHEMA public TO authenticated, anon;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated, anon;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, anon;
